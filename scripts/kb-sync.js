@@ -9,6 +9,7 @@ import { readFileSync, existsSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { execFileSync } from "node:child_process";
+import { parseArgs } from "node:util";
 
 function die(msg, code = 1) {
   console.error(msg);
@@ -32,11 +33,11 @@ function gitTry(dir, args) {
 }
 
 // --- args ---
-let setRemote = null;
-const args = process.argv.slice(2);
-for (let i = 0; i < args.length; i++) {
-  if (args[i] === "--set-remote") setRemote = args[++i] ?? "";
-}
+const { values } = parseArgs({
+  options: { "set-remote": { type: "string" } },
+  strict: false,
+});
+const setRemote = values["set-remote"] ?? null;
 
 // --- resolve data_dir ---
 const configPath = join(homedir(), ".claude", "kb-config.json");

@@ -7,6 +7,7 @@
 import { readFileSync, readdirSync, existsSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
+import { parseArgs } from "node:util";
 
 function die(msg, code = 1) {
   console.error(msg);
@@ -15,16 +16,13 @@ function die(msg, code = 1) {
 }
 
 // --- args ---
-let typeFilter = null;
-const rawTerms = [];
-const args = process.argv.slice(2);
-for (let i = 0; i < args.length; i++) {
-  if (args[i] === "--type") {
-    typeFilter = (args[++i] ?? "").toLowerCase();
-  } else {
-    rawTerms.push(args[i].toLowerCase().trim());
-  }
-}
+const { values, positionals } = parseArgs({
+  options: { type: { type: "string", short: "t" } },
+  allowPositionals: true,
+  strict: false,
+});
+const typeFilter = values.type?.toLowerCase() ?? null;
+const rawTerms = positionals.map((t) => t.toLowerCase().trim());
 if (rawTerms.length === 0) {
   die(
     "ERROR: no search terms given (pass terms, or --type <type> with at least one term or '*')",

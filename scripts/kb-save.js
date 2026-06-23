@@ -11,6 +11,7 @@ import { readFileSync, readdirSync, existsSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { execFileSync } from "node:child_process";
+import { parseArgs } from "node:util";
 
 const REL = new Set([
   "relates_to",
@@ -41,18 +42,19 @@ function git(dir, args, quiet = false) {
 }
 
 // --- args ---
-let slug = "";
-let editId = null;
-const args = process.argv.slice(2);
-for (let i = 0; i < args.length; i++) {
-  if (args[i] === "--slug") slug = args[++i] ?? "";
-  else if (args[i] === "--edit") editId = args[++i] ?? "";
-}
+const { values } = parseArgs({
+  options: {
+    slug: { type: "string" },
+    edit: { type: "string" },
+  },
+  strict: false,
+});
+const editId = values.edit ?? null;
 const editMode = editId !== null;
 if (editMode && !/^kb-\d+$/.test(editId)) {
   die("ERROR: --edit needs an id like kb-0014", 2);
 }
-slug = slug
+let slug = (values.slug ?? "")
   .trim()
   .toLowerCase()
   .replace(/[^a-z0-9]+/g, "-")
