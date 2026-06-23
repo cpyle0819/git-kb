@@ -20,10 +20,11 @@ traversed at search time for related-entry discovery.
   change, no binary artifacts — but recall depends on good tags + LLM expansion
   rather than learned similarity. At personal scale (~50–5000 entries), brute
   lexical search in <100ms is faster than an embedding lookup anyway.
-- vs. **SQLite/Postgres + MCP server** (what this replaces): no daemon, no binary
-  DB, no write-path code — but gives up hybrid BM25+vector scoring and the
-  agentic multi-hop ReAct loop. The data is fully portable (any tool that reads
-  markdown can use it); the old approach locked data inside a binary store.
+- vs. **DB-backed MCP/tool servers** (e.g. SQLite + vector store behind an API):
+  no daemon, no binary DB, no write-path code, no schema migrations — but gives
+  up hybrid BM25+vector scoring and agentic multi-hop retrieval loops. Data is
+  fully portable (any tool that reads markdown can use it); a DB-backed approach
+  locks data inside a binary store that only its server can query.
 
 ## Layout (this repo IS the skill directory)
 
