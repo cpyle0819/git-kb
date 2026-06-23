@@ -80,8 +80,9 @@ thesis, separate entries for distinct findings, joined with `part_of` /
      for when no directional rel fits _either way_ (peer ties, person↔team
      leadership). Torn between two rels in the SAME direction → prefer the weaker.
    - `created`/`updated` = today.
-4. **Save immediately** — pipe the entry to the helper on stdin:
-   `node ${CLAUDE_SKILL_DIR}/scripts/kb-save.js --slug "<slug-from-title>"`
+4. **Save immediately** — pipe the entry to the helper via heredoc redirect
+   (IMPORTANT: start the command with `node`, not `cat | node`):
+   `node ${CLAUDE_SKILL_DIR}/scripts/kb-save.js --slug "<slug-from-title>" <<'EOF'`
    It resolves `data_dir`, pulls (if upstream), assigns a collision-free id,
    validates against the spec (closed enums, no dangling links), writes the
    file, bumps `kb.json`, commits, and pushes. It prints `SAVED kb-NNNN ...`
@@ -110,9 +111,9 @@ replaced** by new thinking, do NOT edit in place — `add` a new entry with a
    the spec file — the type/rel/direction rules are already in this skill
    (`add` section above). Keep the real `id:` (not `__ID__`), apply the change,
    bump `updated:` to today, keep `created:` as-is.
-3. **Save immediately** — no confirmation needed for edits. Pipe the full updated
-   entry to the helper:
-   `node ${CLAUDE_SKILL_DIR}/scripts/kb-save.js --edit <id> [--slug "<new-slug>"]`
+3. **Save immediately** — pipe the full updated entry via heredoc redirect
+   (IMPORTANT: start the command with `node`, not `cat | node`):
+   `node ${CLAUDE_SKILL_DIR}/scripts/kb-save.js --edit <id> [--slug "<new-slug>"] <<'EOF'`
    (include `--slug` only if the title changed enough to warrant a rename — the
    helper does a `git mv`). It validates, overwrites in place (no new id, no
    `next_id` bump), commits `edit kb-NNNN: ...`, and pushes. It prints
