@@ -12,8 +12,20 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 import { execFileSync } from "node:child_process";
 
-const REL = new Set(["relates_to", "part_of", "depends_on", "supersedes", "mentions"]);
-const TYPE = new Set(["factual_reference", "decision", "pattern_convention", "lesson_learned", "bookmark"]);
+const REL = new Set([
+  "relates_to",
+  "part_of",
+  "depends_on",
+  "supersedes",
+  "mentions",
+]);
+const TYPE = new Set([
+  "factual_reference",
+  "decision",
+  "pattern_convention",
+  "lesson_learned",
+  "bookmark",
+]);
 
 function die(msg, code = 1) {
   console.error(msg);
@@ -40,7 +52,11 @@ const editMode = editId !== null;
 if (editMode && !/^kb-\d+$/.test(editId)) {
   die("ERROR: --edit needs an id like kb-0014", 2);
 }
-slug = slug.trim().toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+slug = slug
+  .trim()
+  .toLowerCase()
+  .replace(/[^a-z0-9]+/g, "-")
+  .replace(/^-|-$/g, "");
 if (!editMode && !slug) die("ERROR: missing --slug", 2);
 
 // --- stdin ---
@@ -65,7 +81,10 @@ try {
 const entriesDir = join(dataDir, "entries");
 const manifest = join(dataDir, "kb.json");
 if (!existsSync(join(dataDir, ".git"))) {
-  die(`ERROR: data_dir is not a git repo: '${dataDir}' (run /kb sync to bootstrap)`, 4);
+  die(
+    `ERROR: data_dir is not a git repo: '${dataDir}' (run /kb sync to bootstrap)`,
+    4,
+  );
 }
 if (!existsSync(entriesDir) || !existsSync(manifest)) {
   die(`ERROR: data_dir invalid (no entries/ or kb.json): '${dataDir}'`, 4);
@@ -74,7 +93,11 @@ if (!existsSync(entriesDir) || !existsSync(manifest)) {
 // --- pull (best-effort) ---
 let pullNote = "";
 try {
-  git(dataDir, ["rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{u}"], true);
+  git(
+    dataDir,
+    ["rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{u}"],
+    true,
+  );
   git(dataDir, ["pull", "--quiet"], true);
 } catch {
   pullNote = "no upstream — local only";
@@ -82,7 +105,10 @@ try {
 // Abort if pull left a merge conflict.
 const mergeHead = join(dataDir, ".git", "MERGE_HEAD");
 if (existsSync(mergeHead)) {
-  die("ERROR: git pull left a merge conflict. Resolve it in the data repo, then retry.", 6);
+  die(
+    "ERROR: git pull left a merge conflict. Resolve it in the data repo, then retry.",
+    6,
+  );
 }
 
 // --- map existing entries ---
@@ -103,7 +129,8 @@ try {
 let id;
 let final;
 if (editMode) {
-  if (!existing.has(editId)) die(`ERROR: ${editId} does not exist — nothing to edit`, 5);
+  if (!existing.has(editId))
+    die(`ERROR: ${editId} does not exist — nothing to edit`, 5);
   id = editId;
   final = content;
 } else {
@@ -128,14 +155,17 @@ const title = get("title");
 for (const k of ["title", "type", "created", "updated"]) {
   if (!get(k)) die(`ERROR: missing required field '${k}'`, 5);
 }
-if (!TYPE.has(get("type"))) die(`ERROR: type '${get("type")}' not in closed enum`, 5);
-if (get("type") === "bookmark" && !get("url")) die("ERROR: type 'bookmark' requires a `url:` field", 5);
+if (!TYPE.has(get("type")))
+  die(`ERROR: type '${get("type")}' not in closed enum`, 5);
+if (get("type") === "bookmark" && !get("url"))
+  die("ERROR: type 'bookmark' requires a `url:` field", 5);
 for (const r of [...fm.matchAll(/rel:[ \t]*(\S+)/g)]) {
   if (!REL.has(r[1])) die(`ERROR: rel '${r[1]}' not in closed enum`, 5);
 }
 for (const t of [...fm.matchAll(/to:[ \t]*(kb-\d+)/g)]) {
   if (t[1] === id) continue;
-  if (!existing.has(t[1])) die(`ERROR: link target ${t[1]} does not exist (dangling)`, 5);
+  if (!existing.has(t[1]))
+    die(`ERROR: link target ${t[1]} does not exist (dangling)`, 5);
 }
 
 // --- write ---
@@ -144,7 +174,10 @@ const file = slug ? `${id}-${slug}.md` : (oldFile ?? `${id}.md`);
 if (editMode && oldFile && oldFile !== file) {
   git(dataDir, ["mv", `entries/${oldFile}`, `entries/${file}`]);
 }
-writeFileSync(join(entriesDir, file), final.endsWith("\n") ? final : final + "\n");
+writeFileSync(
+  join(entriesDir, file),
+  final.endsWith("\n") ? final : final + "\n",
+);
 const toAdd = [`entries/${file}`];
 if (!editMode) {
   writeFileSync(manifest, JSON.stringify(kb, null, 2) + "\n");
@@ -167,7 +200,8 @@ try {
   git(dataDir, ["push"], true);
   pushNote = "pushed";
 } catch {
-  pushNote = "committed locally but NOT pushed (offline/auth/diverged) — run /kb sync later";
+  pushNote =
+    "committed locally but NOT pushed (offline/auth/diverged) — run /kb sync later";
 }
 
 // --- report ---

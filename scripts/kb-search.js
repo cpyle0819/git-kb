@@ -36,8 +36,20 @@ const listAll = rawTerms.length === 1 && rawTerms[0] === "*";
 // Tokenize multi-word terms into individual words for per-word scoring.
 // Keep original phrases too for an exact-phrase bonus.
 const STOP = new Set([
-  "the", "a", "an", "of", "for", "to", "and", "or", "in", "on", "is", "it",
-  "with", "how",
+  "the",
+  "a",
+  "an",
+  "of",
+  "for",
+  "to",
+  "and",
+  "or",
+  "in",
+  "on",
+  "is",
+  "it",
+  "with",
+  "how",
 ]);
 const words = new Set();
 for (const t of rawTerms) {
@@ -121,10 +133,22 @@ for (const e of pool) {
   let score = 0;
   const why = new Set();
   for (const w of words) {
-    if (titleL.includes(w)) { score += 5; why.add("title"); }
-    if (tagsL.includes(w)) { score += 3; why.add("tag"); }
-    if (urlL.includes(w)) { score += 3; why.add("url"); }
-    if (bodyL.includes(w)) { score += 1; why.add("body"); }
+    if (titleL.includes(w)) {
+      score += 5;
+      why.add("title");
+    }
+    if (tagsL.includes(w)) {
+      score += 3;
+      why.add("tag");
+    }
+    if (urlL.includes(w)) {
+      score += 3;
+      why.add("url");
+    }
+    if (bodyL.includes(w)) {
+      score += 1;
+      why.add("body");
+    }
   }
   for (const p of phrases) {
     if (titleL.includes(p) || tagsL.includes(p) || bodyL.includes(p)) {

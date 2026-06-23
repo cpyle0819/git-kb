@@ -93,14 +93,19 @@ if (!pull.ok) {
   if (/conflict/i.test(pull.out)) {
     console.log("CONFLICT");
     console.log(pull.out);
-    console.log("Resolve the conflict in the data repo, commit, then run /kb sync again.");
+    console.log(
+      "Resolve the conflict in the data repo, commit, then run /kb sync again.",
+    );
     process.exit(0);
   }
   die(`ERROR: pull failed: ${pull.out}`, 6);
 }
 
 const ahead =
-  parseInt(gitTry(dataDir, ["rev-list", "--count", "@{u}..HEAD"]).out ?? "0", 10) || 0;
+  parseInt(
+    gitTry(dataDir, ["rev-list", "--count", "@{u}..HEAD"]).out ?? "0",
+    10,
+  ) || 0;
 const push = gitTry(dataDir, ["push"]);
 if (!push.ok) die(`ERROR: pull ok, push failed: ${push.out}`, 6);
 
