@@ -3,6 +3,28 @@
 A git-backed personal knowledge base, packaged as a Claude Code **skill** (`/kb`).
 Pairs with a separate, private `kb-data` repo that holds the actual entries.
 
+No database, no server, no embeddings. Entries are plain markdown files with YAML
+frontmatter; git is the persistence layer (commit = durable, `git log` = free
+history). Search is lexical: a Node.js helper reads all entries, parses
+frontmatter, and scores term matches per field — with LLM query expansion at
+invocation to recover semantic recall. A curated `links:` block in frontmatter
+models a lightweight knowledge graph (typed edges from a closed 5-rel vocab)
+traversed at search time for related-entry discovery.
+
+**Trade-offs vs. alternatives:**
+- vs. **graph databases** (Neo4j, Neptune): no infra, no query language, no ops —
+  but traversal is shallow (1-hop at search, manual for deeper). Graph edges are
+  explicit and reviewable in diffs; a graph DB auto-extracts richer structure but
+  needs a running service and its edges are opaque.
+- vs. **vector/embedding RAG**: no model dependency, no reindexing on model
+  change, no binary artifacts — but recall depends on good tags + LLM expansion
+  rather than learned similarity. At personal scale (~50–5000 entries), brute
+  lexical search in <100ms is faster than an embedding lookup anyway.
+- vs. **SQLite/Postgres + MCP server** (what this replaces): no daemon, no binary
+  DB, no write-path code — but gives up hybrid BM25+vector scoring and the
+  agentic multi-hop ReAct loop. The data is fully portable (any tool that reads
+  markdown can use it); the old approach locked data inside a binary store.
+
 ## Layout (this repo IS the skill directory)
 
 - `SKILL.md` — the `/kb` skill (add / search / edit / sync). `${CLAUDE_SKILL_DIR}`
@@ -35,9 +57,3 @@ pre-write it yourself: `{ "data_dir": "/path/to/kb-data" }`.
 | `/kb edit <id or description> <change>` | Modify an existing entry in place (factual corrections). For replaced decisions, use `add` with a `supersedes` link instead. |
 | `/kb sync` | Pull + push. On first run with no remote, offers to wire one up. |
 
-## Design
-
-No database, no server, no embeddings. Retrieval is lexical (Node.js reads all
-entries, parses frontmatter, scores term matches per field) + graph traversal
-over curated `links:` in entry frontmatter. Git is the persistence layer;
-history comes free from `git log`.
