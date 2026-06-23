@@ -2,6 +2,7 @@
 name: kb
 description: Manage a git-backed personal knowledge base (add / search / sync). Invoke for "/kb add <knowledge>", "/kb search <query>", "/kb sync".
 argument-hint: <verb> <content>   # verb = add|search|sync
+allowed-tools: Bash(node ${CLAUDE_SKILL_DIR}/scripts/kb-search.js *)
 ---
 
 # /kb — git-backed knowledge base
@@ -88,21 +89,21 @@ Payload: the freeform knowledge to store.
 
 ### search — recall knowledge
 
-Payload: the query.
+Payload: the query. Search does **not** need the spec, a pull, or any file
+reads — the helper script handles everything in one call.
 
-1. `git -C <data_dir> pull --quiet` (best-effort; continue if offline).
-2. **Expand the query** into a handful of synonyms / related terms yourself —
-   this is how we recover semantic recall without embeddings. (e.g. a query
-   about "shipping" should also try "deploy", "release", "pipeline".)
-3. Search with `git grep` over the entries (fall back to `grep -r` if `git grep`
-   is unavailable), case-insensitive. `git grep` already scans the whole file,
-   so frontmatter tags and body are covered in one pass:
-   `git -C <data_dir> grep -i -l -E '<term1|term2|term3>' -- 'entries/*.md'`
-4. Rank hits (title/tag match > body match; more distinct terms matched > fewer).
-   For the top hits, read the files and **walk `links:` one hop** to surface
-   directly-connected entries the keyword search missed.
-5. Present compact results: `kb-NNNN — <title>` + a one-line snippet + why it
-   matched (keyword vs. link). Offer to show any entry in full.
+1. **Expand the query** into a handful of synonyms / related terms yourself —
+   this is how we recover semantic recall without embeddings (e.g. a query about
+   "shipping" should also try "deploy", "release", "pipeline").
+2. Run the bundled search helper, passing each term as a separate argument:
+   `node ${CLAUDE_SKILL_DIR}/scripts/kb-search.js "<term1>" "<term2>" ...`
+   It reads `data_dir` from the config itself, parses entry frontmatter (no
+   grep), scores matches (title > tag > body), and prints ranked results with
+   `id / title / type / tags / snippet / links` — everything needed to present.
+   `NO_MATCHES` means nothing matched.
+3. Present the results as-is (they're already ranked and compact). The script
+   already includes each hit's snippet and `links:` targets, so **only read a
+   full entry or walk a link if the user asks** — do not pre-read files.
 
 ### sync — reconcile
 
