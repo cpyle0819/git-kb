@@ -56,7 +56,8 @@ function parseEntry(text) {
   const tagsRaw = get("tags"); // e.g. "[a, b-c, d]"
   const tags = tagsRaw.replace(/^\[|\]$/g, "").split(",").map(s => s.trim()).filter(Boolean);
   const links = [...fm.matchAll(/to:[ \t]*(kb-\d+)/g)].map(x => x[1]);
-  return { id: get("id"), title: get("title"), type: get("type"), tags, links, body: body.trim() };
+  return { id: get("id"), title: get("title"), type: get("type"), tags, links,
+    created: get("created"), updated: get("updated"), body: body.trim() };
 }
 
 // Parse every entry once. Keep an id->title map so we can resolve link targets
@@ -101,7 +102,7 @@ results.sort((a, b) => b.score - a.score);
 const FULL_BODY_TOP = 3;
 results.forEach((r, i) => {
   console.log(`### ${r.id} — ${r.title}`);
-  console.log(`type: ${r.type}   tags: [${r.tags.join(", ")}]   match: ${r.why} (score ${r.score})`);
+  console.log(`type: ${r.type}   tags: [${r.tags.join(", ")}]   created: ${r.created}   updated: ${r.updated}   match: ${r.why} (score ${r.score})`);
   console.log(`file: entries/${r.file}`);
   if (r.links.length) {
     const linkStr = r.links.map(id => titleById[id] ? `${id} (${titleById[id]})` : id).join(", ");
