@@ -3,7 +3,7 @@ name: kb
 description: Manage a git-backed personal knowledge base (add / search / sync). Invoke for "/kb add <knowledge>", "/kb search <query>", "/kb sync".
 argument-hint: <verb> <content>   # verb = add|search|sync
 model: sonnet   # kb work (draft/parse/dispatch) is trivial; run on the fastest tier
-allowed-tools: Bash(node ${CLAUDE_SKILL_DIR}/scripts/kb-search.js *), Bash(node ${CLAUDE_SKILL_DIR}/scripts/kb-save.js *)
+allowed-tools: Bash(node ${CLAUDE_SKILL_DIR}/scripts/kb-search.js *), Bash(node ${CLAUDE_SKILL_DIR}/scripts/kb-save.js *), Bash(node ${CLAUDE_SKILL_DIR}/scripts/kb-sync.js *)
 ---
 
 # /kb — git-backed knowledge base
@@ -115,12 +115,20 @@ pull, no spec, no file reads. The helper does all of that. Two steps only:
 
 ### sync — reconcile
 
-No payload.
+No payload. The bundled `kb-sync.js` helper does pull + push in one allowlisted
+call and resolves `data_dir` itself.
 
-0. Resolve/bootstrap `data_dir` (see bottom).
-1. `git -C <data_dir> pull` then `git -C <data_dir> push`.
-2. Report: pulled changes, pushed pending commits, or "already up to date".
-   Surface merge conflicts to the user rather than auto-resolving.
+1. Run `node ${CLAUDE_SKILL_DIR}/scripts/kb-sync.js`. Act on the first-line signal:
+   - **`SYNCED`** → relay the `pull:`/`push:` lines (e.g. "pushed 2 commits").
+   - **`NO_REMOTE`** → the repo has no remote yet. **Ask the user for the kb-data
+     remote URL** (the URL must come from them — for sensitive data this is an
+     internal git host). On their confirmation, run
+     `node ${CLAUDE_SKILL_DIR}/scripts/kb-sync.js --set-remote "<url>"` (adds
+     `origin`, pushes, sets upstream). Never invent or guess a URL.
+   - **`CONFLICT`** → relay it; the user must resolve in the data repo, commit,
+     then `/kb sync` again. Do not auto-resolve.
+   - **`ERROR:` / `data_dir`** → if it's a `data_dir` error, resolve/bootstrap it
+     (see bottom) and retry; otherwise relay the error.
 
 ---
 

@@ -19,9 +19,12 @@ you can share this system without sharing your data.
    isn't yet a repo) — confirming first.
 
 `data_dir` comes only from `~/.claude/kb-config.json` (key `data_dir`). You can
-pre-write it yourself: `{ "data_dir": "/path/to/kb-data" }`. If the content is
-sensitive, host the `kb-data` remote on a private/internal git server and add
-it with `git remote add origin <url>`; the skill never sets a remote for you.
+pre-write it yourself: `{ "data_dir": "/path/to/kb-data" }`.
+
+**Remote / sync:** `kb-data` starts local-only. The first time you run `/kb
+sync` with no remote, the skill asks you for a remote URL and wires it up (`git
+remote add` + push). The URL always comes from you — for sensitive content, use
+a private/internal git host. The skill never invents or guesses a remote.
 
 ## Design
 No database, no server, no embeddings. Retrieval is lexical (`git grep`) +
