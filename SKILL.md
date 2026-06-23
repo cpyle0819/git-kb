@@ -55,7 +55,16 @@ Payload: the freeform knowledge to store.
      the replaced thing has no entry of its own, use `relates_to`); `part_of`
      for component-of; `depends_on` for requires/builds-on; `mentions` for a
      passing reference; `relates_to` as the generic fallback when none fit
-     cleanly. When in doubt between two, prefer the weaker (`relates_to`).
+     cleanly.
+   - **Direction matters.** `part_of`, `depends_on`, and `supersedes` are
+     directional and read FROM this entry: write `part_of`/`depends_on` from the
+     **child / dependent / consumer** toward the parent / dependency (e.g. a
+     component is `part_of` its system; a tool that reads another's data
+     `depends_on` it). If a directional rel would read backwards from this
+     entry, flip your mental model — don't downgrade it to `relates_to`. Only
+     fall back to `relates_to` when no directional rel fits *in either
+     direction* (e.g. peer association, or a person↔team leadership tie). When
+     genuinely torn between two rels in the SAME direction, prefer the weaker.
    - Set `created`/`updated` to today.
 4. **Show the user the drafted file and proposed links. Get confirmation**
    before writing (this is the review step — the whole point of plaintext).
