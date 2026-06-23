@@ -18,8 +18,17 @@ const path = require("path");
 
 function die(msg, code) { console.log(msg); process.exit(code); }
 
-const terms = process.argv.slice(2).map(t => t.toLowerCase()).filter(Boolean);
-if (terms.length === 0) die("ERROR: no search terms given", 2);
+const rawTerms = process.argv.slice(2).map(t => t.toLowerCase().trim()).filter(Boolean);
+if (rawTerms.length === 0) die("ERROR: no search terms given", 2);
+
+// Tokenize into individual words so a multi-word term like "software development"
+// still matches an entry containing only "software" (per-word scoring), instead of
+// requiring the whole phrase verbatim. Keep the original phrases too, for an
+// exact-phrase bonus. Drop 1-char tokens.
+const STOP = new Set(["the","a","an","of","for","to","and","or","in","on","is","it","with","how"]);
+const words = new Set();
+for (const t of rawTerms) for (const w of t.split(/[^a-z0-9]+/)) if (w.length > 1 && !STOP.has(w)) words.add(w);
+const phrases = rawTerms.filter(t => /[^a-z0-9]/.test(t.trim()));  // multi-word phrases only
 
 const configPath = path.join(os.homedir(), ".claude", "kb-config.json");
 let dataDir;
@@ -71,10 +80,15 @@ for (const e of all) {
   const bodyL = e.body.toLowerCase();
   let score = 0;
   const why = new Set();
-  for (const t of terms) {
-    if (titleL.includes(t)) { score += 5; why.add("title"); }
-    if (tagsL.includes(t))  { score += 3; why.add("tag"); }
-    if (bodyL.includes(t))  { score += 1; why.add("body"); }
+  // per-word scoring (title > tag > body)
+  for (const w of words) {
+    if (titleL.includes(w)) { score += 5; why.add("title"); }
+    if (tagsL.includes(w))  { score += 3; why.add("tag"); }
+    if (bodyL.includes(w))  { score += 1; why.add("body"); }
+  }
+  // exact-phrase bonus so verbatim multi-word matches still rank highest
+  for (const p of phrases) {
+    if (titleL.includes(p) || tagsL.includes(p) || bodyL.includes(p)) { score += 4; why.add("phrase"); }
   }
   if (score > 0) results.push({ ...e, score, why: [...why].join("+") });
 }
