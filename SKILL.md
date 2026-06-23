@@ -111,8 +111,8 @@ replaced** by new thinking, do NOT edit in place — `add` a new entry with a
    the spec file — the type/rel/direction rules are already in this skill
    (`add` section above). Keep the real `id:` (not `__ID__`), apply the change,
    bump `updated:` to today, keep `created:` as-is.
-3. **Show the user a diff/summary of what changes; get confirmation.**
-4. On confirmation, pipe the full updated entry to the helper in edit mode:
+3. **Save immediately** — no confirmation needed for edits. Pipe the full updated
+   entry to the helper:
    `node ${CLAUDE_SKILL_DIR}/scripts/kb-save.js --edit <id> [--slug "<new-slug>"]`
    (include `--slug` only if the title changed enough to warrant a rename — the
    helper does a `git mv`). It validates, overwrites in place (no new id, no
