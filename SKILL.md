@@ -101,14 +101,15 @@ replaced** by new thinking, do NOT edit in place — `add` a new entry with a
 `supersedes` link to the old one, preserving the history.
 
 1. **Identify the entry.** If the payload names an id (`kb-NNNN`), use it; else
-   run the search helper to find it and confirm the right one with the user.
-2. Read the current file (`entries/<id>-<slug>.md`) and the spec at
-   `${CLAUDE_SKILL_DIR}/spec/entry-format.md`.
-3. **Draft the full updated entry** — keep the real `id:` (not `__ID__`), apply
-   the change, bump `updated:` to today, keep `created:` as-is. Same type/rel/
-   direction rules as `add`.
-4. **Show the user a diff/summary of what changes; get confirmation.**
-5. On confirmation, pipe the full updated entry to the helper in edit mode:
+   run the search helper to find it. The search helper returns the full body of
+   top hits — **use that content directly; do NOT re-read the entry file.** If
+   the entry wasn't in the search results, read it then, but only then.
+2. **Draft the full updated entry** using the content from step 1. Do NOT read
+   the spec file — the type/rel/direction rules are already in this skill
+   (`add` section above). Keep the real `id:` (not `__ID__`), apply the change,
+   bump `updated:` to today, keep `created:` as-is.
+3. **Show the user a diff/summary of what changes; get confirmation.**
+4. On confirmation, pipe the full updated entry to the helper in edit mode:
    `node ${CLAUDE_SKILL_DIR}/scripts/kb-save.js --edit <id> [--slug "<new-slug>"]`
    (include `--slug` only if the title changed enough to warrant a rename — the
    helper does a `git mv`). It validates, overwrites in place (no new id, no
@@ -183,5 +184,11 @@ future calls read it directly.
   stored once).
 - **Never commit secrets/credentials** — git history is permanent.
 - Keep one entry per file; one logical fact per entry.
+- **State what a thing IS, not what it isn't.** Write positively. If someone is
+  *not* a manager, don't say "not a manager" — say their actual role.
+- **Minimize tool calls.** The search helper already returns full bodies + link
+  titles. Do not re-read files the helper already returned. Do not read the spec
+  file for edit (the rules are in this skill). One search + one save = the
+  target for edit.
 - All git operations use `-C <data_dir>` so they run against the data repo
   regardless of the session's current directory.
