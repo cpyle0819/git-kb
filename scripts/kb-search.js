@@ -18,8 +18,17 @@ const path = require("path");
 
 function die(msg, code) { console.log(msg); process.exit(code); }
 
-const rawTerms = process.argv.slice(2).map(t => t.toLowerCase().trim()).filter(Boolean);
-if (rawTerms.length === 0) die("ERROR: no search terms given", 2);
+// Parse args: terms are positional; --type <type> is an optional filter.
+let typeFilter = null;
+const rawArgs = process.argv.slice(2);
+const rawTerms = [];
+for (let i = 0; i < rawArgs.length; i++) {
+  if (rawArgs[i] === "--type") { typeFilter = (rawArgs[++i] || "").toLowerCase(); }
+  else { rawTerms.push(rawArgs[i].toLowerCase().trim()); }
+}
+rawTerms.length || die("ERROR: no search terms given (pass terms, or --type <type> with at least one term or '*')", 2);
+// Special case: a single "*" term means "list all" (useful with --type to list all bookmarks, etc.)
+const listAll = rawTerms.length === 1 && rawTerms[0] === "*";
 
 // Tokenize into individual words so a multi-word term like "software development"
 // still matches an entry containing only "software" (per-word scoring), instead of
@@ -74,23 +83,25 @@ for (const f of files) {
   if (e.id) titleById[e.id] = e.title;
 }
 
-// Score each entry against the terms (title > tag > body).
+// Apply type filter, then score.
+const pool = typeFilter ? all.filter(e => e.type === typeFilter) : all;
+if (typeFilter && pool.length === 0) die(`NO_MATCHES (no entries with type '${typeFilter}')`, 0);
+
 const results = [];
-for (const e of all) {
+for (const e of pool) {
+  if (listAll) { results.push({ ...e, score: 1, why: "list-all" }); continue; }
   const titleL = e.title.toLowerCase();
   const tagsL = e.tags.join(" ").toLowerCase();
   const urlL = (e.url || "").toLowerCase();
   const bodyL = e.body.toLowerCase();
   let score = 0;
   const why = new Set();
-  // per-word scoring (title > tag > url > body)
   for (const w of words) {
     if (titleL.includes(w)) { score += 5; why.add("title"); }
     if (tagsL.includes(w))  { score += 3; why.add("tag"); }
     if (urlL.includes(w))   { score += 3; why.add("url"); }
     if (bodyL.includes(w))  { score += 1; why.add("body"); }
   }
-  // exact-phrase bonus so verbatim multi-word matches still rank highest
   for (const p of phrases) {
     if (titleL.includes(p) || tagsL.includes(p) || bodyL.includes(p)) { score += 4; why.add("phrase"); }
   }

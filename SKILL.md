@@ -130,9 +130,13 @@ pull, no spec, no file reads. The helper does all of that. Two steps only:
    "shipping" should also try "deploy", "release", "pipeline"). Then run the
    helper in the SAME step, passing each term as a separate argument:
    `node ${CLAUDE_SKILL_DIR}/scripts/kb-search.js "<term1>" "<term2>" ...`
+   **Optional filter:** add `--type <type>` to restrict results to a single entry
+   type (e.g. `--type bookmark "*"` lists all bookmarks; `--type decision "*"`
+   lists all decisions). Use `"*"` as the term to list all matching the type
+   without further keyword filtering.
    The helper resolves `data_dir` from the config, parses entry frontmatter (no
-   grep), scores matches (title > tag > body), and prints ranked results. The
-   top hits include their **full body**, and `links:` are resolved to target
+   grep), scores matches (title > tag > url > body), and prints ranked results.
+   The top hits include their **full body**, and `links:` are resolved to target
    titles — so you have everything to answer AND to offer related entries in one
    call. Special outputs: `NO_MATCHES` (nothing matched) or a line starting
    `ERROR:` — only THEN resolve/bootstrap `data_dir` (see bottom) and retry.
