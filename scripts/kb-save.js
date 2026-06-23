@@ -37,6 +37,14 @@ function git(dir, args, quiet = false) {
   }).trim();
 }
 
+function gitTry(dir, args) {
+  try {
+    return { ok: true, out: git(dir, args, true) };
+  } catch (e) {
+    return { ok: false, out: ((e.stdout ?? "") + (e.stderr ?? "")).trim() };
+  }
+}
+
 function resolveDataDir() {
   const configPath = join(homedir(), ".claude", "kb-config.json");
   let dataDir;
@@ -132,6 +140,29 @@ function validate(fm, id, existing) {
   return { title, errors };
 }
 
+function setRemote(dataDir, url) {
+  const branch = git(dataDir, ["rev-parse", "--abbrev-ref", "HEAD"], true);
+  const remotes = gitTry(dataDir, ["remote"]).out.split("\n").filter(Boolean);
+  if (remotes.includes("origin")) {
+    const cur = gitTry(dataDir, ["remote", "get-url", "origin"]).out;
+    return {
+      error: `ERROR: remote 'origin' already exists (${cur}).`,
+      code: 5,
+    };
+  }
+  const add = gitTry(dataDir, ["remote", "add", "origin", url]);
+  if (!add.ok)
+    return { error: `ERROR: git remote add failed: ${add.out}`, code: 5 };
+  const push = gitTry(dataDir, ["push", "-u", "origin", branch]);
+  if (!push.ok) {
+    return {
+      error: `ERROR: remote added but push failed: ${push.out}\nFix access/URL and try again.`,
+      code: 5,
+    };
+  }
+  return { status: "remote_set", url, branch };
+}
+
 function save(content, { slug, editId, dataDir, entriesDir, manifest }) {
   const editMode = editId !== null;
   const fileById = mapExistingEntries(entriesDir);
@@ -198,13 +229,15 @@ function save(content, { slug, editId, dataDir, entriesDir, manifest }) {
   ]);
 
   // Push
+  const remotes = gitTry(dataDir, ["remote"]).out.split("\n").filter(Boolean);
   let pushNote;
-  try {
-    git(dataDir, ["push"], true);
-    pushNote = "pushed";
-  } catch {
-    pushNote =
-      "committed locally but NOT pushed (offline/auth/diverged) — run /kb sync later";
+  if (!remotes.includes("origin")) {
+    pushNote = "NO_REMOTE";
+  } else {
+    const pushResult = gitTry(dataDir, ["push"]);
+    pushNote = pushResult.ok
+      ? "pushed"
+      : "committed locally but NOT pushed (offline/auth/diverged)";
   }
 
   return { status: editMode ? "edited" : "saved", id, file, title, pushNote };
@@ -214,7 +247,10 @@ function save(content, { slug, editId, dataDir, entriesDir, manifest }) {
 
 function formatResult(result, pullNote) {
   const lines = [];
-  if (result.status === "no_changes") {
+  if (result.status === "remote_set") {
+    lines.push(`REMOTE_SET origin -> ${result.url}`);
+    lines.push(`pushed branch '${result.branch}' and set upstream.`);
+  } else if (result.status === "no_changes") {
     lines.push(`NO_CHANGES ${result.id}`);
     lines.push("The entry content is identical — nothing to commit.");
   } else {
@@ -238,9 +274,28 @@ function die(msg, code = 1) {
 }
 
 const { values } = parseArgs({
-  options: { slug: { type: "string" }, edit: { type: "string" } },
+  options: {
+    slug: { type: "string" },
+    edit: { type: "string" },
+    "set-remote": { type: "string" },
+  },
   strict: false,
 });
+
+const resolved = resolveDataDir();
+if (resolved.error) die(resolved.error, resolved.code);
+
+// --- set-remote mode (one-time remote wiring) ---
+const setRemoteUrl = values["set-remote"] ?? null;
+if (setRemoteUrl !== null) {
+  if (!setRemoteUrl) die("ERROR: --set-remote needs a URL", 2);
+  const result = setRemote(resolved.dataDir, setRemoteUrl);
+  if (result.error) die(result.error, result.code);
+  console.log(formatResult(result));
+  process.exit(0);
+}
+
+// --- add/edit mode ---
 const editId = values.edit ?? null;
 const editMode = editId !== null;
 if (editMode && !/^kb-\d+$/.test(editId))
@@ -261,9 +316,6 @@ if (editMode) {
 } else if (!/^id:\s*__ID__\s*$/m.test(content)) {
   die("ERROR: stdin frontmatter must contain `id: __ID__`", 2);
 }
-
-const resolved = resolveDataDir();
-if (resolved.error) die(resolved.error, resolved.code);
 
 const pullResult = pull(resolved.dataDir);
 if (pullResult.error) die(pullResult.error, pullResult.code);

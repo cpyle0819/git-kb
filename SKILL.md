@@ -1,9 +1,9 @@
 ---
 name: kb
-description: Manage a git-backed personal knowledge base (add / search / edit / sync). Invoke for "/kb add <knowledge>", "/kb search <query>", "/kb edit <id> <change>", "/kb sync".
-argument-hint: <verb> <content> # verb = add|search|edit|sync
+description: Manage a git-backed personal knowledge base (add / search / edit). Invoke for "/kb add <knowledge>", "/kb search <query>", "/kb edit <id> <change>".
+argument-hint: <verb> <content> # verb = add|search|edit
 model: sonnet
-allowed-tools: Read, Bash(node ${CLAUDE_SKILL_DIR}/scripts/kb-search.js *), Bash(node ${CLAUDE_SKILL_DIR}/scripts/kb-save.js *), Bash(node ${CLAUDE_SKILL_DIR}/scripts/kb-sync.js *)
+allowed-tools: Read, Bash(node ${CLAUDE_SKILL_DIR}/scripts/kb-search.js *), Bash(node ${CLAUDE_SKILL_DIR}/scripts/kb-save.js *)
 ---
 
 # /kb — git-backed knowledge base
@@ -14,7 +14,7 @@ git is the persistence layer and the markdown files are the source of truth.
 
 ## Dispatch first — do only what the verb needs
 
-The first token of `$ARGUMENTS` is the verb: `add`, `search`, `edit`, or `sync`;
+The first token of `$ARGUMENTS` is the verb: `add`, `search`, or `edit`;
 the payload is what remains. If the verb is none of these, tell the user the
 valid verbs and stop (no natural-language fallback in v1).
 
@@ -24,11 +24,10 @@ valid verbs and stop (no natural-language fallback in v1).
   validates it itself. Just run it (below).
 - `add` — needs the spec (to write a valid entry); helper handles `data_dir`/git.
 - `edit` — like `add`, for changing an EXISTING entry in place (facts/refinements).
-- `sync` — runs the sync helper, which resolves `data_dir` itself.
 
 `data_dir` is the local clone of the **kb-data** repo (holds `entries/` and
 `kb.json`), read only from **`~/.claude/kb-config.json`** (key `data_dir`;
-resolve `~`). When `add`/`sync` need it, resolve/bootstrap per
+resolve `~`). When `add`/`edit` need it, resolve/bootstrap per
 [Resolve & bootstrap data_dir](#resolve--bootstrap-data_dir) below.
 
 ---
@@ -88,7 +87,7 @@ thesis, separate entries for distinct findings, joined with `part_of` /
    validates against the spec (closed enums, no dangling links), writes the
    file, bumps `kb.json`, commits, and pushes. It prints `SAVED kb-NNNN ...`
    with a `push:` line (a failed push keeps the local commit — relay that and
-   suggest `/kb sync`). If it prints an `ERROR:` line, fix the entry and retry;
+   suggest retrying later). If it prints an `ERROR:` line, fix the entry and retry;
    if the error is about `data_dir`, resolve/bootstrap it (see bottom) first.
 
    **Splitting into multiple entries:** the helper assigns each id at save time,
@@ -118,7 +117,7 @@ replaced** by new thinking, do NOT edit in place — `add` a new entry with a
    (include `--slug` only if the title changed enough to warrant a rename — the
    helper does a `git mv`). It validates, overwrites in place (no new id, no
    `next_id` bump), commits `edit kb-NNNN: ...`, and pushes. It prints
-   `EDITED kb-NNNN` + a `push:` line; relay a failed push and suggest `/kb sync`.
+   `EDITED kb-NNNN` + a `push:` line; relay a failed push and suggest retrying later.
    On an `ERROR:` line, fix and retry.
 
 ### search — recall knowledge
@@ -150,22 +149,15 @@ pull, no spec, no file reads. The helper does all of that. Two steps only:
    URL, and never truncate URLs (no `…`). Present bookmark lists as a flat
    list (not a table) so URLs have room and are copy-pasteable.
 
-### sync — reconcile
+---
 
-No payload. The bundled `kb-sync.js` helper does pull + push in one allowlisted
-call and resolves `data_dir` itself.
+### First-time remote setup
 
-1. Run `node ${CLAUDE_SKILL_DIR}/scripts/kb-sync.js`. Act on the first-line signal:
-   - **`SYNCED`** → relay the `pull:`/`push:` lines (e.g. "pushed 2 commits").
-   - **`NO_REMOTE`** → the repo has no remote yet. **Ask the user for the kb-data
-     remote URL** (the URL must come from them — for sensitive data this is an
-     internal git host). On their confirmation, run
-     `node ${CLAUDE_SKILL_DIR}/scripts/kb-sync.js --set-remote "<url>"` (adds
-     `origin`, pushes, sets upstream). Never invent or guess a URL.
-   - **`CONFLICT`** → relay it; the user must resolve in the data repo, commit,
-     then `/kb sync` again. Do not auto-resolve.
-   - **`ERROR:` / `data_dir`** → if it's a `data_dir` error, resolve/bootstrap it
-     (see bottom) and retry; otherwise relay the error.
+When the `push:` line from `kb-save.js` says `NO_REMOTE`, the data repo has no
+git remote yet. **Ask the user for the kb-data remote URL** (the URL must come
+from them — for sensitive data, use an internal git host). On their confirmation:
+`node ${CLAUDE_SKILL_DIR}/scripts/kb-save.js --set-remote "<url>"`
+This adds `origin`, pushes all commits, and sets upstream. Never invent a URL.
 
 ---
 
@@ -186,7 +178,7 @@ Read `data_dir` from `~/.claude/kb-config.json` (resolve `~`). Then:
    create `entries/` + `kb.json` if absent.
 
 Always confirm before creating/initializing. No remote is set — that's the
-user's to add later for `sync`. Once valid, save the path to the config so
+user's to add later (the skill prompts on first `NO_REMOTE`). Once valid, save the path to the config so
 future calls read it directly.
 
 ## Rules
