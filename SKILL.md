@@ -1,6 +1,7 @@
 ---
-description: Manage the git-backed personal knowledge base (add / search / sync)
-argument-hint: add <knowledge> | search <query> | sync
+name: kb
+description: Manage a git-backed personal knowledge base (add / search / sync). Invoke for "/kb add <knowledge>", "/kb search <query>", "/kb sync".
+argument-hint: <verb> [data_dir] <content>   # verb = add|search|sync
 ---
 
 # /kb — git-backed knowledge base
@@ -9,30 +10,40 @@ You are operating the user's personal knowledge base. It is a **git repo of
 markdown entries** (the `kb-data` repo). There is no database and no server —
 git is the persistence layer and the markdown files are the source of truth.
 
-## Configuration
+## The entry-format spec (bundled with this skill)
 
-All paths come from a fixed-location config file: **`~/.claude/kb-config.json`**
-(machine-local; never committed). Read it first. It has two keys:
+The authoritative entry contract lives **next to this file** at
+`${CLAUDE_SKILL_DIR}/spec/entry-format.md` (file naming, frontmatter fields, the
+closed `type` and `rel` enums, edge rules, `kb.json`). **For `add` and `search`,
+read it first.** `sync` neither writes nor parses entries, so it can skip it.
 
-- `system_dir` — the kb-system repo clone (holds `spec/entry-format.md`).
-- `data_dir` — the kb-data repo clone (holds `entries/` and `kb.json`).
+## Resolve the data directory (`data_dir`)
 
-If the file or either key is missing, ask the user for the path(s) once, write
-them to `~/.claude/kb-config.json`, then continue. Resolve `~` in the values.
+`data_dir` is the local clone of the **kb-data** repo (holds `entries/` and
+`kb.json`). It is machine-specific. Resolve it in this order:
 
-If `data_dir` does not exist or is not a git repo, stop and tell the user to
-clone their `kb-data` repo there — do not improvise a location.
+1. **Argument** — if the token right after the verb is **path-like** (starts with
+   `/`, `~`, or `./`), it IS `data_dir`. Use it; the remaining tokens are the
+   payload. (Persist it: write `{"data_dir": "<that path>"}` to
+   `~/.claude/kb-config.json` so future calls can omit it.)
+2. **Config** — else read `~/.claude/kb-config.json` and use its `data_dir`.
+3. **Neither** — stop and ask the user to either pass the path as the first
+   argument (`/kb <verb> <data_dir> ...`) or set `data_dir` in
+   `~/.claude/kb-config.json`. Do not improvise a location.
 
-The entry file format is defined in `<system_dir>/spec/entry-format.md`. **For
-`add` and `search`, read that spec first** — it is the authoritative contract
-(file naming, frontmatter fields, the closed `type` and `rel` enums, edge rules,
-`kb.json`). `sync` neither writes nor parses entries, so it does not need the spec.
+Resolve `~` in any path. If the resolved `data_dir` does not exist or is not a
+git repo, stop and tell the user to clone their `kb-data` repo there.
+
+> Payload note: because `data_dir` is detected only when path-like, a natural-
+> language query/knowledge payload (which won't start with `/`, `~`, or `./`) is
+> never mistaken for it. Rare exception: a search query that literally begins
+> with a path — pass `data_dir` explicitly in that case.
 
 ## Dispatch
 
-`$ARGUMENTS` begins with a verb: `add`, `search`, or `sync`. The rest is the
-payload. If the first word is none of these, tell the user the three valid verbs
-and stop (no natural-language fallback in v1).
+After resolving `data_dir`, the first token of `$ARGUMENTS` is the verb: `add`,
+`search`, or `sync`. The payload is what remains. If the verb is none of these,
+tell the user the three valid verbs and stop (no natural-language fallback in v1).
 
 ---
 
