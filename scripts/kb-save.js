@@ -66,7 +66,13 @@ while (existing.has(id)) { n++; id = `kb-${String(n).padStart(4, "0")}`; }
 // --- substitute id, then validate against the spec ---
 const final = content.replace(/^id:\s*__ID__\s*$/m, `id: ${id}`);
 const fm = (final.match(/^---\n([\s\S]*?)\n---/) || [, ""])[1];
-const get = k => { const m = fm.match(new RegExp(`^${k}:[ \\t]*(.*)$`, "m")); return m ? m[1].trim() : ""; };
+const get = k => {
+  const m = fm.match(new RegExp(`^${k}:[ \\t]*(.*)$`, "m"));
+  if (!m) return "";
+  // strip a single pair of surrounding quotes (YAML-quoted scalars, e.g. titles
+  // containing ':' or ','), so the commit msg / display value is clean.
+  return m[1].trim().replace(/^(['"])([\s\S]*)\1$/, "$2");
+};
 const title = get("title");
 for (const k of ["title", "type", "created", "updated"]) if (!get(k)) die(`ERROR: missing required field '${k}'`, 5);
 if (!TYPE.has(get("type"))) die(`ERROR: type '${get("type")}' not in closed enum`, 5);
