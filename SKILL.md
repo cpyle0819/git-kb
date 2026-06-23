@@ -2,7 +2,7 @@
 name: kb
 description: Manage a git-backed personal knowledge base (add / search / sync). Invoke for "/kb add <knowledge>", "/kb search <query>", "/kb sync".
 argument-hint: <verb> <content>   # verb = add|search|sync
-allowed-tools: Bash(node ${CLAUDE_SKILL_DIR}/scripts/kb-search.js *)
+allowed-tools: Bash(node ${CLAUDE_SKILL_DIR}/scripts/kb-search.js *), Bash(node ${CLAUDE_SKILL_DIR}/scripts/kb-save.js *)
 ---
 
 # /kb — git-backed knowledge base
@@ -32,50 +32,47 @@ resolve `~`). When `add`/`sync` need it, resolve/bootstrap per
 
 ### add — capture knowledge
 
-Payload: the freeform knowledge to store.
+Payload: the freeform knowledge to store. You draft + review; the bundled
+`kb-save.js` helper does ALL the mechanical work (pull, id assignment, write,
+manifest bump, commit, push, spec validation) in one allowlisted call.
 
-0. Resolve/bootstrap `data_dir` (see bottom). Read the spec at
-   `${CLAUDE_SKILL_DIR}/spec/entry-format.md` — you need it to write a valid entry.
-1. **Pull first** so ids and links are current: `git -C <data_dir> pull --quiet`
-   (if it fails — offline — note it and continue; do not abort capture).
-2. Read `kb.json` for `next_id` → candidate id `kb-NNNN` (zero-padded, 4 digits).
-   **Verify no entry with that id already exists** (`ls entries/` or grep the
-   id); if it does, advance to the next free id. This guards against duplicate
-   ids when the repo was edited on another machine.
-3. Draft the entry per the spec:
-   - **`type`** — pick the closed value that fits: `decision` if the input states
-     a choice + rationale; `lesson_learned` for a debugging insight/gotcha;
-     `pattern_convention` for a reusable rule; otherwise `factual_reference`.
-   - Write `title` + a concise markdown body from the user's input.
-   - Propose `tags` (free-form).
-   - Propose `links` to existing entries — only the closed `rel` set, only `to:`
-     ids you have confirmed exist (grep entries first). **`rel` guidance:**
-     use `supersedes` ONLY when `to:` is the specific entry being replaced
-     (don't use it for "this changes a thing some factual entry describes" — if
-     the replaced thing has no entry of its own, use `relates_to`); `part_of`
+1. Read the spec at `${CLAUDE_SKILL_DIR}/spec/entry-format.md` — you need it to
+   write valid frontmatter. (No need to read `kb.json` or pull — the helper
+   handles ids and syncing.)
+2. **Find candidate link targets.** To propose `links`, you need the ids of
+   related existing entries: run the search helper with terms from the new
+   knowledge (`node ${CLAUDE_SKILL_DIR}/scripts/kb-search.js "<term>" ...`) and
+   note the `kb-NNNN` ids of genuine matches. Only link to ids it returns.
+3. **Draft the entry** (use `id: __ID__` as a placeholder — the helper assigns
+   the real id):
+   - **`type`** — `decision` if the input states a choice + rationale;
+     `lesson_learned` for a debugging insight/gotcha; `pattern_convention` for a
+     reusable rule; otherwise `factual_reference`.
+   - `title` + a concise markdown body.
+   - `tags` (free-form).
+   - `links` — closed `rel` set only; `to:` only ids confirmed in step 2.
+     **`rel` guidance:** `supersedes` ONLY when `to:` is the specific entry being
+     replaced (if the replaced thing has no entry, use `relates_to`); `part_of`
      for component-of; `depends_on` for requires/builds-on; `mentions` for a
-     passing reference; `relates_to` as the generic fallback when none fit
-     cleanly.
-   - **Direction matters.** `part_of`, `depends_on`, and `supersedes` are
-     directional and read FROM this entry: write `part_of`/`depends_on` from the
-     **child / dependent / consumer** toward the parent / dependency (e.g. a
-     component is `part_of` its system; a tool that reads another's data
-     `depends_on` it). If a directional rel would read backwards from this
-     entry, flip your mental model — don't downgrade it to `relates_to`. Only
-     fall back to `relates_to` when no directional rel fits *in either
-     direction* (e.g. peer association, or a person↔team leadership tie). When
-     genuinely torn between two rels in the SAME direction, prefer the weaker.
-   - Set `created`/`updated` to today.
-4. **Show the user the drafted file and proposed links. Get confirmation**
-   before writing (this is the review step — the whole point of plaintext).
-5. Write `entries/kb-NNNN-<slug>.md`. Set `next_id` in `kb.json` to the id you
-   used + 1.
-6. Commit BOTH files together:
-   `git -C <data_dir> add entries/kb-NNNN-<slug>.md kb.json`
-   `git -C <data_dir> commit -m "add kb-NNNN: <title>"`
-7. Push: `git -C <data_dir> push`. **If push fails (offline/auth/diverged), keep
-   the local commit and tell the user it's committed-but-not-pushed; suggest
-   `/kb sync` later.** Capture must never fail just because the remote is down.
+     passing reference; `relates_to` as the generic fallback.
+   - **Direction matters.** `part_of`/`depends_on`/`supersedes` read FROM this
+     entry: write them from the **child / dependent / consumer** toward the
+     parent / dependency (a component is `part_of` its system; a tool that reads
+     another's data `depends_on` it). If a directional rel would read backwards,
+     flip the direction — don't downgrade to `relates_to`. Reserve `relates_to`
+     for when no directional rel fits *either way* (peer ties, person↔team
+     leadership). Torn between two rels in the SAME direction → prefer the weaker.
+   - `created`/`updated` = today.
+4. **Show the user the drafted entry and proposed links; get confirmation**
+   (this is the review step — the whole point of plaintext).
+5. On confirmation, pipe the entry to the helper on stdin:
+   `node ${CLAUDE_SKILL_DIR}/scripts/kb-save.js --slug "<slug-from-title>"`
+   It resolves `data_dir`, pulls (if upstream), assigns a collision-free id,
+   validates against the spec (closed enums, no dangling links), writes the
+   file, bumps `kb.json`, commits, and pushes. It prints `SAVED kb-NNNN ...`
+   with a `push:` line (a failed push keeps the local commit — relay that and
+   suggest `/kb sync`). If it prints an `ERROR:` line, fix the entry and retry;
+   if the error is about `data_dir`, resolve/bootstrap it (see bottom) first.
 
 ### search — recall knowledge
 
