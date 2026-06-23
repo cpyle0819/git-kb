@@ -57,12 +57,22 @@ try {
 } catch { die(`ERROR: cannot read ${configPath}`, 3); }
 const entriesDir = path.join(dataDir, "entries");
 const manifest = path.join(dataDir, "kb.json");
+if (!fs.existsSync(path.join(dataDir, ".git"))) die(`ERROR: data_dir is not a git repo: '${dataDir}' (run /kb sync to bootstrap)`, 4);
 if (!fs.existsSync(entriesDir) || !fs.existsSync(manifest)) die(`ERROR: data_dir invalid (no entries/ or kb.json): '${dataDir}'`, 4);
 
 // --- pull if an upstream is configured (best-effort) ---
 let pullNote = "";
-try { git(dataDir, ["rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{u}"], true); git(dataDir, ["pull", "--quiet"], true); }
-catch { pullNote = "no upstream — local only"; }
+try {
+  git(dataDir, ["rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{u}"], true);
+  git(dataDir, ["pull", "--quiet"], true);
+} catch {
+  pullNote = "no upstream — local only";
+}
+// If pull left the repo in a conflicted/merging state, abort — don't commit on top of it.
+try {
+  const mergeHead = path.join(dataDir, ".git", "MERGE_HEAD");
+  if (fs.existsSync(mergeHead)) die("ERROR: git pull left a merge conflict. Resolve it in the data repo, then retry.", 6);
+} catch (e) { if (e.code) throw e; /* re-throw die() exits */ }
 
 // --- map existing files by id ---
 const fileById = {};
@@ -70,7 +80,9 @@ for (const f of fs.readdirSync(entriesDir).filter(f => f.endsWith(".md"))) {
   const m = f.match(/^(kb-\d+)/); if (m) fileById[m[1]] = f;
 }
 const existing = new Set(Object.keys(fileById));
-const kb = JSON.parse(fs.readFileSync(manifest, "utf8"));
+let kb;
+try { kb = JSON.parse(fs.readFileSync(manifest, "utf8")); }
+catch { die(`ERROR: kb.json is malformed (invalid JSON) at '${manifest}'`, 4); }
 
 // --- determine id ---
 let id, final;
@@ -116,6 +128,14 @@ if (!editMode) { fs.writeFileSync(manifest, JSON.stringify(kb, null, 2) + "\n");
 
 // --- commit, then push (graceful) ---
 git(dataDir, ["add", ...toAdd]);
+// Check if there's actually anything to commit (edit with identical content → no-op).
+const status = execFileSync("git", ["-C", dataDir, "status", "--porcelain"],
+  { encoding: "utf8" }).trim();
+if (!status) {
+  console.log(`NO_CHANGES ${id}`);
+  console.log("The entry content is identical — nothing to commit.");
+  process.exit(0);
+}
 git(dataDir, ["commit", "-m", `${editMode ? "edit" : "add"} ${id}: ${title}`]);
 let pushNote;
 try { git(dataDir, ["push"], true); pushNote = "pushed"; }

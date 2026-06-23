@@ -40,12 +40,13 @@ catch { die(`ERROR: cannot read ${configPath} (run /kb once to set data_dir)`, 3
 if (!fs.existsSync(path.join(dataDir, ".git"))) die(`ERROR: data_dir is not a git repo: '${dataDir}'`, 4);
 
 const branch = git(dataDir, ["rev-parse", "--abbrev-ref", "HEAD"], true);
-const hasRemote = gitTry(dataDir, ["remote"]).out.split("\n").filter(Boolean).length > 0;
+const remotes = gitTry(dataDir, ["remote"]).out.split("\n").filter(Boolean);
+const hasOrigin = remotes.includes("origin");
 
 // --- --set-remote mode (one-time wiring) ---
 if (setRemote !== null) {
   if (!setRemote) die("ERROR: --set-remote needs a URL", 2);
-  if (hasRemote) {
+  if (hasOrigin) {
     const cur = gitTry(dataDir, ["remote", "get-url", "origin"]).out;
     die(`ERROR: remote 'origin' already exists (${cur}). Change it yourself with 'git -C ${dataDir} remote set-url origin <url>' if needed.`, 5);
   }
@@ -59,7 +60,7 @@ if (setRemote !== null) {
 }
 
 // --- default sync: pull then push ---
-if (!hasRemote) {
+if (!hasOrigin) {
   console.log("NO_REMOTE");
   console.log(`No git remote configured for ${dataDir}.`);
   console.log("To enable sync, set one (URL must come from you):");
