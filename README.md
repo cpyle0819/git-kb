@@ -5,10 +5,14 @@ Pairs with a separate, private `kb-data` repo that holds the actual entries — 
 you can share this system without sharing your data.
 
 ## Layout (this repo IS the skill directory)
-- `SKILL.md` — the `/kb` skill (add / search / sync). `${CLAUDE_SKILL_DIR}`
-  resolves to this directory, so the bundled spec is always findable.
-- `spec/entry-format.md` — the entry file-format contract (bundled; read by the
-  skill via `${CLAUDE_SKILL_DIR}/spec/entry-format.md`).
+- `SKILL.md` — the `/kb` skill (add / search / edit / sync). `${CLAUDE_SKILL_DIR}`
+  resolves to this directory, so the bundled spec and scripts are always findable.
+- `spec/entry-format.md` — the entry file-format contract (closed enums for type
+  and rel, frontmatter schema, file-naming rules).
+- `scripts/` — bundled Node.js helpers (allowlisted via `allowed-tools`):
+  - `kb-search.js` — parses all entries, scores by field, prints ranked results.
+  - `kb-save.js` — writes/validates/commits/pushes entries (add + edit modes).
+  - `kb-sync.js` — pull + push, or first-time remote setup.
 
 ## Install
 1. Symlink (or clone) this repo as a personal skill:
@@ -27,6 +31,7 @@ remote add` + push). The URL always comes from you — for sensitive content, us
 a private/internal git host. The skill never invents or guesses a remote.
 
 ## Design
-No database, no server, no embeddings. Retrieval is lexical (`git grep`) +
-graph traversal over curated `links:` in entry frontmatter. Git is the
-persistence layer; history comes free from `git log`.
+No database, no server, no embeddings. Retrieval is lexical (Node.js reads all
+entries, parses frontmatter, scores term matches per field) + graph traversal
+over curated `links:` in entry frontmatter. Git is the persistence layer;
+history comes free from `git log`.
