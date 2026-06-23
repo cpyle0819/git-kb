@@ -50,12 +50,22 @@ function parseEntry(text) {
   return { id: get("id"), title: get("title"), type: get("type"), tags, links, body: body.trim() };
 }
 
+// Parse every entry once. Keep an id->title map so we can resolve link targets
+// to human titles (graph context) without a second lookup.
 const files = fs.readdirSync(entriesDir).filter(f => f.endsWith(".md"));
-const results = [];
+const all = [];
+const titleById = {};
 for (const f of files) {
-  const full = path.join(entriesDir, f);
-  const e = parseEntry(fs.readFileSync(full, "utf8"));
+  const e = parseEntry(fs.readFileSync(path.join(entriesDir, f), "utf8"));
   if (!e) continue;
+  e.file = f;
+  all.push(e);
+  if (e.id) titleById[e.id] = e.title;
+}
+
+// Score each entry against the terms (title > tag > body).
+const results = [];
+for (const e of all) {
   const titleL = e.title.toLowerCase();
   const tagsL = e.tags.join(" ").toLowerCase();
   const bodyL = e.body.toLowerCase();
@@ -66,20 +76,29 @@ for (const f of files) {
     if (tagsL.includes(t))  { score += 3; why.add("tag"); }
     if (bodyL.includes(t))  { score += 1; why.add("body"); }
   }
-  if (score > 0) {
-    const snippet = e.body.split("\n").find(l => l.trim()) || "";
-    results.push({ ...e, file: f, score, why: [...why].join("+"), snippet });
-  }
+  if (score > 0) results.push({ ...e, score, why: [...why].join("+") });
 }
 
 if (results.length === 0) die("NO_MATCHES", 0);
 results.sort((a, b) => b.score - a.score);
 
-for (const r of results) {
+// Top hits get full body (entries are small + single-fact, so this lets the
+// caller answer in ONE call — no follow-up read). Rest get a one-line snippet.
+const FULL_BODY_TOP = 3;
+results.forEach((r, i) => {
   console.log(`### ${r.id} — ${r.title}`);
   console.log(`type: ${r.type}   tags: [${r.tags.join(", ")}]   match: ${r.why} (score ${r.score})`);
   console.log(`file: entries/${r.file}`);
-  console.log(`snippet: ${r.snippet}`);
-  if (r.links.length) console.log(`links: ${r.links.join(" ")}`);
+  if (r.links.length) {
+    const linkStr = r.links.map(id => titleById[id] ? `${id} (${titleById[id]})` : id).join(", ");
+    console.log(`links: ${linkStr}`);
+  }
+  if (i < FULL_BODY_TOP) {
+    console.log("---");
+    console.log(r.body);
+    console.log("---");
+  } else {
+    console.log(`snippet: ${r.body.split("\n").find(l => l.trim()) || ""}`);
+  }
   console.log("");
-}
+});

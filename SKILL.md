@@ -79,13 +79,15 @@ pull, no spec, no file reads. The helper does all of that. Two steps only:
    helper in the SAME step, passing each term as a separate argument:
    `node ${CLAUDE_SKILL_DIR}/scripts/kb-search.js "<term1>" "<term2>" ...`
    The helper resolves `data_dir` from the config, parses entry frontmatter (no
-   grep), scores matches (title > tag > body), and prints ranked results with
-   `id / title / type / tags / snippet / links`. Special outputs: `NO_MATCHES`
-   (nothing matched) or a line starting `ERROR:` — only THEN resolve/bootstrap
-   `data_dir` (see bottom) and retry.
-2. Present the results as-is (already ranked and compact). The snippet and
-   `links:` targets are included, so **only read a full entry or walk a link if
-   the user asks** — do not pre-read files.
+   grep), scores matches (title > tag > body), and prints ranked results. The
+   top hits include their **full body**, and `links:` are resolved to target
+   titles — so you have everything to answer AND to offer related entries in one
+   call. Special outputs: `NO_MATCHES` (nothing matched) or a line starting
+   `ERROR:` — only THEN resolve/bootstrap `data_dir` (see bottom) and retry.
+2. Answer the user's question directly from the returned content (the top hits'
+   full bodies are already present — do NOT read files again). Then, if useful,
+   mention the resolved `links:` as related entries to explore. Only read a full
+   file or walk a link further if the user asks.
 
 ### sync — reconcile
 
