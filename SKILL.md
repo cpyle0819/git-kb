@@ -3,6 +3,7 @@ name: kb
 description: Manage a git-backed personal knowledge base (add / search / edit). Invoke for "/kb add <knowledge>", "/kb search <query>", "/kb edit <id> <change>".
 argument-hint: <verb> <content> # verb = add|search|edit
 model: sonnet
+effort: low
 allowed-tools: Read, Bash(node ${CLAUDE_SKILL_DIR}/scripts/kb-search.js *), Bash(node ${CLAUDE_SKILL_DIR}/scripts/kb-save.js *)
 ---
 
