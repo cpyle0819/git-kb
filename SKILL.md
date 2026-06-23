@@ -144,6 +144,8 @@ pull, no spec, no file reads. The helper does all of that. Two steps only:
    full bodies are already present — do NOT read files again). Then, if useful,
    mention the resolved `links:` as related entries to explore. Only read a full
    file or walk a link further if the user asks.
+   **For bookmarks:** always show the actual `url:` value from the output — that
+   IS the entry's primary content. Never substitute a description for the URL.
 
 ### sync — reconcile
 
