@@ -165,11 +165,9 @@ function search(entries, { rawTerms, typeFilter }) {
 
 // ─── Presentation ────────────────────────────────────────────────────────────
 
-const FULL_BODY_TOP = 3;
-
 function formatResults(results, titleById) {
   const lines = [];
-  for (const [i, r] of results.entries()) {
+  for (const r of results) {
     lines.push(`### ${r.id} — ${r.title}`);
     lines.push(
       `type: ${r.type}   tags: [${r.tags.join(", ")}]   created: ${r.created}   updated: ${r.updated}   match: ${r.why} (score ${r.score})`,
@@ -182,11 +180,7 @@ function formatResults(results, titleById) {
         .join(", ");
       lines.push(`links: ${linkStr}`);
     }
-    if (i < FULL_BODY_TOP) {
-      lines.push("---", r.body, "---");
-    } else {
-      lines.push(`snippet: ${r.body.split("\n").find((l) => l.trim()) ?? ""}`);
-    }
+    lines.push("---", r.body, "---");
     lines.push("");
   }
   return lines.join("\n");
