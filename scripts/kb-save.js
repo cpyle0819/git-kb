@@ -58,7 +58,7 @@ function resolveDataDir() {
   const manifest = join(dataDir, "kb.json");
   if (!existsSync(join(dataDir, ".git"))) {
     return {
-      error: `ERROR: data_dir is not a git repo: '${dataDir}' (run /kb sync to bootstrap)`,
+      error: `ERROR: data_dir is not a git repo: '${dataDir}' (run git init there, or let /kb bootstrap it)`,
       code: 4,
     };
   }
