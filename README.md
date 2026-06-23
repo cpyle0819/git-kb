@@ -29,14 +29,13 @@ traversed at search time for related-entry discovery.
 
 ## Layout (this repo IS the skill directory)
 
-- `SKILL.md` — the `/kb` skill (add / search / edit / sync). `${CLAUDE_SKILL_DIR}`
+- `SKILL.md` — the `/kb` skill (add / search / edit). `${CLAUDE_SKILL_DIR}`
   resolves to this directory, so the bundled spec and scripts are always findable.
 - `spec/entry-format.md` — the entry file-format contract (closed enums for type
   and rel, frontmatter schema, file-naming rules).
 - `scripts/` — Node.js helpers (allowlisted via `allowed-tools`):
   - `kb-search.js` — parses all entries, scores by field, prints ranked results.
-  - `kb-save.js` — writes/validates/commits/pushes entries (add + edit modes).
-  - `kb-sync.js` — pull + push, or first-time remote setup.
+  - `kb-save.js` — writes/validates/commits/pushes entries (add + edit + first-time remote setup).
 
 ## Install
 
@@ -54,7 +53,6 @@ pre-write it yourself: `{ "data_dir": "/path/to/kb-data" }`.
 
 | Command                                 | What it does                                                                                                                 |
 | --------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
-| `/kb add <knowledge>`                   | Draft an entry from freeform text (or a file/URL), confirm, commit+push.                                                     |
+| `/kb add <knowledge>`                   | Draft an entry from freeform text (or a file/URL), save + commit + push.                                                     |
 | `/kb search <query>`                    | Lexical search with query expansion; returns ranked results with full bodies. Use `--type bookmark` to filter.               |
 | `/kb edit <id or description> <change>` | Modify an existing entry in place (factual corrections). For replaced decisions, use `add` with a `supersedes` link instead. |
-| `/kb sync`                              | Pull + push. On first run with no remote, offers to wire one up.                                                             |
