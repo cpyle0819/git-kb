@@ -80,9 +80,7 @@ thesis, separate entries for distinct findings, joined with `part_of` /
      for when no directional rel fits _either way_ (peer ties, person↔team
      leadership). Torn between two rels in the SAME direction → prefer the weaker.
    - `created`/`updated` = today.
-4. **Show the user the drafted entry and proposed links; get confirmation**
-   (this is the review step — the whole point of plaintext).
-5. On confirmation, pipe the entry to the helper on stdin:
+4. **Save immediately** — pipe the entry to the helper on stdin:
    `node ${CLAUDE_SKILL_DIR}/scripts/kb-save.js --slug "<slug-from-title>"`
    It resolves `data_dir`, pulls (if upstream), assigns a collision-free id,
    validates against the spec (closed enums, no dangling links), writes the
