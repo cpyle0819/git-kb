@@ -1,7 +1,7 @@
 ---
 name: kb
-description: Manage a git-backed personal knowledge base (add / search / sync). Invoke for "/kb add <knowledge>", "/kb search <query>", "/kb sync".
-argument-hint: <verb> <content>   # verb = add|search|sync
+description: Manage a git-backed personal knowledge base (add / search / edit / sync). Invoke for "/kb add <knowledge>", "/kb search <query>", "/kb edit <id> <change>", "/kb sync".
+argument-hint: <verb> <content>   # verb = add|search|edit|sync
 model: sonnet   # kb work (draft/parse/dispatch) is trivial; run on the fastest tier
 allowed-tools: Bash(node ${CLAUDE_SKILL_DIR}/scripts/kb-search.js *), Bash(node ${CLAUDE_SKILL_DIR}/scripts/kb-save.js *), Bash(node ${CLAUDE_SKILL_DIR}/scripts/kb-sync.js *)
 ---
@@ -14,15 +14,16 @@ git is the persistence layer and the markdown files are the source of truth.
 
 ## Dispatch first — do only what the verb needs
 
-The first token of `$ARGUMENTS` is the verb: `add`, `search`, or `sync`; the
-payload is what remains. If the verb is none of these, tell the user the three
+The first token of `$ARGUMENTS` is the verb: `add`, `search`, `edit`, or `sync`;
+the payload is what remains. If the verb is none of these, tell the user the
 valid verbs and stop (no natural-language fallback in v1).
 
 **Do NOT do any setup up front.** Each verb does exactly the setup it needs:
 - `search` — needs nothing first. The helper script resolves `data_dir` and
   validates it itself. Just run it (below).
-- `add` — needs `data_dir` (for git) and the spec (to write a valid entry).
-- `sync` — needs `data_dir` only.
+- `add` — needs the spec (to write a valid entry); helper handles `data_dir`/git.
+- `edit` — like `add`, for changing an EXISTING entry in place (facts/refinements).
+- `sync` — runs the sync helper, which resolves `data_dir` itself.
 
 `data_dir` is the local clone of the **kb-data** repo (holds `entries/` and
 `kb.json`), read only from **`~/.claude/kb-config.json`** (key `data_dir`;
@@ -92,6 +93,29 @@ thesis, separate entries for distinct findings, joined with `part_of` /
    entries with `links:` pointing at that real id. One `kb-save.js` call per
    entry.
 
+### edit — change an existing entry in place
+
+Payload: a target (id or description) + the change. Use `edit` for **factual
+corrections and refinements** to an existing entry. **For a decision that was
+replaced** by new thinking, do NOT edit in place — `add` a new entry with a
+`supersedes` link to the old one, preserving the history.
+
+1. **Identify the entry.** If the payload names an id (`kb-NNNN`), use it; else
+   run the search helper to find it and confirm the right one with the user.
+2. Read the current file (`entries/<id>-<slug>.md`) and the spec at
+   `${CLAUDE_SKILL_DIR}/spec/entry-format.md`.
+3. **Draft the full updated entry** — keep the real `id:` (not `__ID__`), apply
+   the change, bump `updated:` to today, keep `created:` as-is. Same type/rel/
+   direction rules as `add`.
+4. **Show the user a diff/summary of what changes; get confirmation.**
+5. On confirmation, pipe the full updated entry to the helper in edit mode:
+   `node ${CLAUDE_SKILL_DIR}/scripts/kb-save.js --edit <id> [--slug "<new-slug>"]`
+   (include `--slug` only if the title changed enough to warrant a rename — the
+   helper does a `git mv`). It validates, overwrites in place (no new id, no
+   `next_id` bump), commits `edit kb-NNNN: ...`, and pushes. It prints
+   `EDITED kb-NNNN` + a `push:` line; relay a failed push and suggest `/kb sync`.
+   On an `ERROR:` line, fix and retry.
+
 ### search — recall knowledge
 
 Payload: the query. **Do no setup** — no config read, no `data_dir` check, no
@@ -134,7 +158,9 @@ call and resolves `data_dir` itself.
 
 ## Resolve & bootstrap data_dir
 
-(Only `add` and `sync` need this; `search`'s helper does its own resolution.)
+(All helpers resolve `data_dir` from the config themselves. You only need this
+section when a helper exits with a `data_dir` `ERROR:` — i.e. the config is
+missing or the path isn't a valid repo yet — to bootstrap it, then retry.)
 
 Read `data_dir` from `~/.claude/kb-config.json` (resolve `~`). Then:
 
