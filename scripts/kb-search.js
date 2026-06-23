@@ -9,30 +9,8 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 import { parseArgs } from "node:util";
 
-function die(msg, code = 1) {
-  console.error(msg);
-  process.exitCode = code;
-  process.exit();
-}
+// ─── Core ────────────────────────────────────────────────────────────────────
 
-// --- args ---
-const { values, positionals } = parseArgs({
-  options: { type: { type: "string", short: "t" } },
-  allowPositionals: true,
-  strict: false,
-});
-const typeFilter = values.type?.toLowerCase() ?? null;
-const rawTerms = positionals.map((t) => t.toLowerCase().trim());
-if (rawTerms.length === 0) {
-  die(
-    "ERROR: no search terms given (pass terms, or --type <type> with at least one term or '*')",
-    2,
-  );
-}
-const listAll = rawTerms.length === 1 && rawTerms[0] === "*";
-
-// Tokenize multi-word terms into individual words for per-word scoring.
-// Keep original phrases too for an exact-phrase bonus.
 const STOP = new Set([
   "the",
   "a",
@@ -49,29 +27,7 @@ const STOP = new Set([
   "with",
   "how",
 ]);
-const words = new Set();
-for (const t of rawTerms) {
-  for (const w of t.split(/[^a-z0-9]+/)) {
-    if (w.length > 1 && !STOP.has(w)) words.add(w);
-  }
-}
-const phrases = rawTerms.filter((t) => /[^a-z0-9]/.test(t.trim()));
 
-// --- resolve data_dir ---
-const configPath = join(homedir(), ".claude", "kb-config.json");
-let dataDir;
-try {
-  const cfg = JSON.parse(readFileSync(configPath, "utf8"));
-  dataDir = (cfg.data_dir ?? "").replace(/^~(?=$|\/)/, homedir());
-} catch {
-  die(`ERROR: cannot read ${configPath} (run /kb once to set data_dir)`, 3);
-}
-const entriesDir = join(dataDir, "entries");
-if (!dataDir || !existsSync(entriesDir)) {
-  die(`ERROR: data_dir invalid or has no entries/: '${dataDir}'`, 4);
-}
-
-// --- parse entries ---
 function parseEntry(text) {
   const m = text.match(/^---\n([\s\S]*?)\n---\n?([\s\S]*)$/);
   if (!m) return null;
@@ -101,86 +57,172 @@ function parseEntry(text) {
   };
 }
 
-const files = readdirSync(entriesDir).filter((f) => f.endsWith(".md"));
-const all = [];
-const titleById = {};
-for (const f of files) {
-  const e = parseEntry(readFileSync(join(entriesDir, f), "utf8"));
-  if (!e) continue;
-  e.file = f;
-  all.push(e);
-  if (e.id) titleById[e.id] = e.title;
+function resolveDataDir() {
+  const configPath = join(homedir(), ".claude", "kb-config.json");
+  let dataDir;
+  try {
+    const cfg = JSON.parse(readFileSync(configPath, "utf8"));
+    dataDir = (cfg.data_dir ?? "").replace(/^~(?=$|\/)/, homedir());
+  } catch {
+    return {
+      error: `ERROR: cannot read ${configPath} (run /kb once to set data_dir)`,
+      code: 3,
+    };
+  }
+  const entriesDir = join(dataDir, "entries");
+  if (!dataDir || !existsSync(entriesDir)) {
+    return {
+      error: `ERROR: data_dir invalid or has no entries/: '${dataDir}'`,
+      code: 4,
+    };
+  }
+  return { dataDir, entriesDir };
 }
 
-// --- filter + score ---
-const pool = typeFilter ? all.filter((e) => e.type === typeFilter) : all;
-if (typeFilter && pool.length === 0) {
-  die(`NO_MATCHES (no entries with type '${typeFilter}')`, 0);
+function loadEntries(entriesDir) {
+  const files = readdirSync(entriesDir).filter((f) => f.endsWith(".md"));
+  const entries = [];
+  const titleById = {};
+  for (const f of files) {
+    const e = parseEntry(readFileSync(join(entriesDir, f), "utf8"));
+    if (!e) continue;
+    e.file = f;
+    entries.push(e);
+    if (e.id) titleById[e.id] = e.title;
+  }
+  return { entries, titleById };
 }
 
-const results = [];
-for (const e of pool) {
-  if (listAll) {
-    results.push({ ...e, score: 1, why: "list-all" });
-    continue;
-  }
-  const titleL = e.title.toLowerCase();
-  const tagsL = e.tags.join(" ").toLowerCase();
-  const urlL = (e.url ?? "").toLowerCase();
-  const bodyL = e.body.toLowerCase();
-  let score = 0;
-  const why = new Set();
-  for (const w of words) {
-    if (titleL.includes(w)) {
-      score += 5;
-      why.add("title");
-    }
-    if (tagsL.includes(w)) {
-      score += 3;
-      why.add("tag");
-    }
-    if (urlL.includes(w)) {
-      score += 3;
-      why.add("url");
-    }
-    if (bodyL.includes(w)) {
-      score += 1;
-      why.add("body");
+function tokenize(rawTerms) {
+  const words = new Set();
+  for (const t of rawTerms) {
+    for (const w of t.split(/[^a-z0-9]+/)) {
+      if (w.length > 1 && !STOP.has(w)) words.add(w);
     }
   }
-  for (const p of phrases) {
-    if (titleL.includes(p) || tagsL.includes(p) || bodyL.includes(p)) {
-      score += 4;
-      why.add("phrase");
-    }
-  }
-  if (score > 0) results.push({ ...e, score, why: [...why].join("+") });
+  const phrases = rawTerms.filter((t) => /[^a-z0-9]/.test(t.trim()));
+  return { words, phrases };
 }
 
-if (results.length === 0) die("NO_MATCHES", 0);
-results.sort((a, b) => b.score - a.score);
+function search(entries, { rawTerms, typeFilter }) {
+  const listAll = rawTerms.length === 1 && rawTerms[0] === "*";
+  const pool = typeFilter
+    ? entries.filter((e) => e.type === typeFilter)
+    : entries;
 
-// --- output (stdout = data for the model to consume) ---
+  if (typeFilter && pool.length === 0) {
+    return {
+      status: "no_matches",
+      message: `no entries with type '${typeFilter}'`,
+    };
+  }
+
+  const { words, phrases } = tokenize(rawTerms);
+  const results = [];
+
+  for (const e of pool) {
+    if (listAll) {
+      results.push({ ...e, score: 1, why: "list-all" });
+      continue;
+    }
+    const titleL = e.title.toLowerCase();
+    const tagsL = e.tags.join(" ").toLowerCase();
+    const urlL = (e.url ?? "").toLowerCase();
+    const bodyL = e.body.toLowerCase();
+    let score = 0;
+    const why = new Set();
+    for (const w of words) {
+      if (titleL.includes(w)) {
+        score += 5;
+        why.add("title");
+      }
+      if (tagsL.includes(w)) {
+        score += 3;
+        why.add("tag");
+      }
+      if (urlL.includes(w)) {
+        score += 3;
+        why.add("url");
+      }
+      if (bodyL.includes(w)) {
+        score += 1;
+        why.add("body");
+      }
+    }
+    for (const p of phrases) {
+      if (titleL.includes(p) || tagsL.includes(p) || bodyL.includes(p)) {
+        score += 4;
+        why.add("phrase");
+      }
+    }
+    if (score > 0) results.push({ ...e, score, why: [...why].join("+") });
+  }
+
+  if (results.length === 0) return { status: "no_matches" };
+  results.sort((a, b) => b.score - a.score);
+  return { status: "ok", results };
+}
+
+// ─── Presentation ────────────────────────────────────────────────────────────
+
 const FULL_BODY_TOP = 3;
-for (const [i, r] of results.entries()) {
-  console.log(`### ${r.id} — ${r.title}`);
-  console.log(
-    `type: ${r.type}   tags: [${r.tags.join(", ")}]   created: ${r.created}   updated: ${r.updated}   match: ${r.why} (score ${r.score})`,
-  );
-  if (r.url) console.log(`url: ${r.url}`);
-  console.log(`file: entries/${r.file}`);
-  if (r.links.length) {
-    const linkStr = r.links
-      .map((id) => (titleById[id] ? `${id} (${titleById[id]})` : id))
-      .join(", ");
-    console.log(`links: ${linkStr}`);
+
+function formatResults(results, titleById) {
+  const lines = [];
+  for (const [i, r] of results.entries()) {
+    lines.push(`### ${r.id} — ${r.title}`);
+    lines.push(
+      `type: ${r.type}   tags: [${r.tags.join(", ")}]   created: ${r.created}   updated: ${r.updated}   match: ${r.why} (score ${r.score})`,
+    );
+    if (r.url) lines.push(`url: ${r.url}`);
+    lines.push(`file: entries/${r.file}`);
+    if (r.links.length) {
+      const linkStr = r.links
+        .map((id) => (titleById[id] ? `${id} (${titleById[id]})` : id))
+        .join(", ");
+      lines.push(`links: ${linkStr}`);
+    }
+    if (i < FULL_BODY_TOP) {
+      lines.push("---", r.body, "---");
+    } else {
+      lines.push(`snippet: ${r.body.split("\n").find((l) => l.trim()) ?? ""}`);
+    }
+    lines.push("");
   }
-  if (i < FULL_BODY_TOP) {
-    console.log("---");
-    console.log(r.body);
-    console.log("---");
-  } else {
-    console.log(`snippet: ${r.body.split("\n").find((l) => l.trim()) ?? ""}`);
-  }
-  console.log("");
+  return lines.join("\n");
 }
+
+// ─── CLI ─────────────────────────────────────────────────────────────────────
+
+const { values, positionals } = parseArgs({
+  options: { type: { type: "string", short: "t" } },
+  allowPositionals: true,
+  strict: false,
+});
+const typeFilter = values.type?.toLowerCase() ?? null;
+const rawTerms = positionals.map((t) => t.toLowerCase().trim());
+
+if (rawTerms.length === 0) {
+  console.error(
+    "ERROR: no search terms given (pass terms, or --type <type> with at least one term or '*')",
+  );
+  process.exit(2);
+}
+
+const resolved = resolveDataDir();
+if (resolved.error) {
+  console.error(resolved.error);
+  process.exit(resolved.code);
+}
+
+const { entries, titleById } = loadEntries(resolved.entriesDir);
+const result = search(entries, { rawTerms, typeFilter });
+
+if (result.status === "no_matches") {
+  console.error(
+    result.message ? `NO_MATCHES (${result.message})` : "NO_MATCHES",
+  );
+  process.exit(0);
+}
+
+process.stdout.write(formatResults(result.results, titleById));
