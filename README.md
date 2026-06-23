@@ -13,15 +13,15 @@ you can share this system without sharing your data.
 ## Install
 1. Symlink (or clone) this repo as a personal skill:
    `ln -s "$PWD" ~/.claude/skills/kb`
-2. Create your private `kb-data` repo (on an internal/private host if the
-   content is sensitive) and clone it locally.
-3. Tell `/kb` where the data lives, either:
-   - per call: `/kb <verb> <data_dir> <content>` (path-like first arg), or
-   - once: write `~/.claude/kb-config.json` → `{ "data_dir": "/path/to/kb-data" }`
-4. Use it: `/kb add <knowledge>`, `/kb search <query>`, `/kb sync`.
+2. Run `/kb add <knowledge>` (or any verb). On first use it asks where your
+   `kb-data` repo lives and saves the answer to `~/.claude/kb-config.json`.
+   It will create + `git init` the repo for you if the path doesn't exist (or
+   isn't yet a repo) — confirming first.
 
-`data_dir` resolution order: argument (if path-like) > `~/.claude/kb-config.json`
-> prompt. The first form, when given, is persisted to the config.
+`data_dir` comes only from `~/.claude/kb-config.json` (key `data_dir`). You can
+pre-write it yourself: `{ "data_dir": "/path/to/kb-data" }`. If the content is
+sensitive, host the `kb-data` remote on a private/internal git server and add
+it with `git remote add origin <url>`; the skill never sets a remote for you.
 
 ## Design
 No database, no server, no embeddings. Retrieval is lexical (`git grep`) +

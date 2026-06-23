@@ -1,7 +1,7 @@
 ---
 name: kb
 description: Manage a git-backed personal knowledge base (add / search / sync). Invoke for "/kb add <knowledge>", "/kb search <query>", "/kb sync".
-argument-hint: <verb> [data_dir] <content>   # verb = add|search|sync
+argument-hint: <verb> <content>   # verb = add|search|sync
 ---
 
 # /kb — git-backed knowledge base
@@ -20,30 +20,33 @@ read it first.** `sync` neither writes nor parses entries, so it can skip it.
 ## Resolve the data directory (`data_dir`)
 
 `data_dir` is the local clone of the **kb-data** repo (holds `entries/` and
-`kb.json`). It is machine-specific. Resolve it in this order:
+`kb.json`). It is machine-specific and comes only from
+**`~/.claude/kb-config.json`** (key `data_dir`). Resolve `~` in the value.
 
-1. **Argument** — if the token right after the verb is **path-like** (starts with
-   `/`, `~`, or `./`), it IS `data_dir`. Use it; the remaining tokens are the
-   payload. (Persist it: write `{"data_dir": "<that path>"}` to
-   `~/.claude/kb-config.json` so future calls can omit it.)
-2. **Config** — else read `~/.claude/kb-config.json` and use its `data_dir`.
-3. **Neither** — stop and ask the user to either pass the path as the first
-   argument (`/kb <verb> <data_dir> ...`) or set `data_dir` in
-   `~/.claude/kb-config.json`. Do not improvise a location.
+**If the config file is missing, or has no `data_dir`:** ask the user for the
+path, then bootstrap it (see below). Do not improvise a location.
 
-Resolve `~` in any path. If the resolved `data_dir` does not exist or is not a
-git repo, stop and tell the user to clone their `kb-data` repo there.
+**Validate / bootstrap the resolved path** before doing any verb work:
 
-> Payload note: because `data_dir` is detected only when path-like, a natural-
-> language query/knowledge payload (which won't start with `/`, `~`, or `./`) is
-> never mistaken for it. Rare exception: a search query that literally begins
-> with a path — pass `data_dir` explicitly in that case.
+1. **Path exists and IS a git repo** → use it. (If it came from a fresh prompt,
+   first write `{"data_dir": "<path>"}` to `~/.claude/kb-config.json`.)
+2. **Path does NOT exist** → offer to create and initialize it: `mkdir -p
+   <path>`, `git init`, create `entries/` and `kb.json`
+   (`{"schema_version": 1, "next_id": 1}`). On confirmation, do it, then write
+   the config. (No remote is set — that's the user's to add later for sync.)
+3. **Path exists but is NOT a git repo** → offer to initialize it in place:
+   `git init` and create `entries/` + `kb.json` if absent. On confirmation, do
+   it, then write the config.
+
+Always confirm with the user before creating/initializing anything. Once
+`data_dir` is valid and saved, future calls read it straight from the config.
 
 ## Dispatch
 
-After resolving `data_dir`, the first token of `$ARGUMENTS` is the verb: `add`,
-`search`, or `sync`. The payload is what remains. If the verb is none of these,
-tell the user the three valid verbs and stop (no natural-language fallback in v1).
+After `data_dir` is resolved and valid, the first token of `$ARGUMENTS` is the
+verb: `add`, `search`, or `sync`. The payload is what remains. If the verb is
+none of these, tell the user the three valid verbs and stop (no natural-language
+fallback in v1).
 
 ---
 
