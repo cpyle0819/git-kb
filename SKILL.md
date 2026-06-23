@@ -36,6 +36,17 @@ Payload: the freeform knowledge to store. You draft + review; the bundled
 `kb-save.js` helper does ALL the mechanical work (pull, id assignment, write,
 manifest bump, commit, push, spec validation) in one allowlisted call.
 
+**If the payload references a file or URL** rather than containing the knowledge
+itself ("summarize this PDF", "add what's at <url>"), read/extract it first with
+your normal available tools, then draft from the result. The skill bundles no
+extractor — just use what's available.
+
+**Keep entries atomic — one logical fact / idea per entry.** If a source is
+large (a paper, a long doc), do NOT write one giant entry. Split it into a few
+focused entries and link them (e.g. a `factual_reference` for the core
+thesis, separate entries for distinct findings, joined with `part_of` /
+`relates_to`). Atomic entries keep search scannable and the graph meaningful.
+
 1. Read the spec at `${CLAUDE_SKILL_DIR}/spec/entry-format.md` — you need it to
    write valid frontmatter. (No need to read `kb.json` or pull — the helper
    handles ids and syncing.)
@@ -73,6 +84,12 @@ manifest bump, commit, push, spec validation) in one allowlisted call.
    with a `push:` line (a failed push keeps the local commit — relay that and
    suggest `/kb sync`). If it prints an `ERROR:` line, fix the entry and retry;
    if the error is about `data_dir`, resolve/bootstrap it (see bottom) first.
+
+   **Splitting into multiple entries:** the helper assigns each id at save time,
+   so you can't reference a sibling's id before it exists. Save the **anchor**
+   entry first, read the `SAVED kb-NNNN` it prints, then save the dependent
+   entries with `links:` pointing at that real id. One `kb-save.js` call per
+   entry.
 
 ### search — recall knowledge
 
