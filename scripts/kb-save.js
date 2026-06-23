@@ -22,7 +22,7 @@ const path = require("path");
 const { execFileSync } = require("child_process");
 
 const REL = new Set(["relates_to", "part_of", "depends_on", "supersedes", "mentions"]);
-const TYPE = new Set(["factual_reference", "decision", "pattern_convention", "lesson_learned"]);
+const TYPE = new Set(["factual_reference", "decision", "pattern_convention", "lesson_learned", "bookmark"]);
 
 function die(msg, code = 1) { console.log(msg); process.exit(code); }
 function git(dir, args, quiet = false) {
@@ -96,6 +96,7 @@ const get = k => {
 const title = get("title");
 for (const k of ["title", "type", "created", "updated"]) if (!get(k)) die(`ERROR: missing required field '${k}'`, 5);
 if (!TYPE.has(get("type"))) die(`ERROR: type '${get("type")}' not in closed enum`, 5);
+if (get("type") === "bookmark" && !get("url")) die("ERROR: type 'bookmark' requires a `url:` field", 5);
 for (const r of [...fm.matchAll(/rel:[ \t]*(\S+)/g)]) if (!REL.has(r[1])) die(`ERROR: rel '${r[1]}' not in closed enum`, 5);
 for (const t of [...fm.matchAll(/to:[ \t]*(kb-\d+)/g)]) {
   if (t[1] === id) continue;

@@ -58,10 +58,13 @@ thesis, separate entries for distinct findings, joined with `part_of` /
    note the `kb-NNNN` ids of genuine matches. Only link to ids it returns.
 3. **Draft the entry** (use `id: __ID__` as a placeholder — the helper assigns
    the real id):
-   - **`type`** — `decision` if the input states a choice + rationale;
+   - **`type`** — `bookmark` if the input is a URL/link to save (requires a
+     `url:` frontmatter field); `decision` if it states a choice + rationale;
      `lesson_learned` for a debugging insight/gotcha; `pattern_convention` for a
      reusable rule; otherwise `factual_reference`.
-   - `title` + a concise markdown body.
+   - `url` (frontmatter field) — required for `bookmark`, optional for others.
+   - `title` + a concise markdown body (for bookmarks: body is optional
+     notes/context about *why* you saved it).
    - `tags` (free-form).
    - `links` — closed `rel` set only; `to:` only ids confirmed in step 2.
      **`rel` guidance:** `supersedes` ONLY when `to:` is the specific entry being

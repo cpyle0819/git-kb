@@ -56,7 +56,8 @@ function parseEntry(text) {
   const tagsRaw = get("tags"); // e.g. "[a, b-c, d]"
   const tags = tagsRaw.replace(/^\[|\]$/g, "").split(",").map(s => s.trim()).filter(Boolean);
   const links = [...fm.matchAll(/to:[ \t]*(kb-\d+)/g)].map(x => x[1]);
-  return { id: get("id"), title: get("title"), type: get("type"), tags, links,
+  const url = get("url") || null;
+  return { id: get("id"), title: get("title"), type: get("type"), url, tags, links,
     created: get("created"), updated: get("updated"), body: body.trim() };
 }
 
@@ -78,13 +79,15 @@ const results = [];
 for (const e of all) {
   const titleL = e.title.toLowerCase();
   const tagsL = e.tags.join(" ").toLowerCase();
+  const urlL = (e.url || "").toLowerCase();
   const bodyL = e.body.toLowerCase();
   let score = 0;
   const why = new Set();
-  // per-word scoring (title > tag > body)
+  // per-word scoring (title > tag > url > body)
   for (const w of words) {
     if (titleL.includes(w)) { score += 5; why.add("title"); }
     if (tagsL.includes(w))  { score += 3; why.add("tag"); }
+    if (urlL.includes(w))   { score += 3; why.add("url"); }
     if (bodyL.includes(w))  { score += 1; why.add("body"); }
   }
   // exact-phrase bonus so verbatim multi-word matches still rank highest
@@ -103,6 +106,7 @@ const FULL_BODY_TOP = 3;
 results.forEach((r, i) => {
   console.log(`### ${r.id} — ${r.title}`);
   console.log(`type: ${r.type}   tags: [${r.tags.join(", ")}]   created: ${r.created}   updated: ${r.updated}   match: ${r.why} (score ${r.score})`);
+  if (r.url) console.log(`url: ${r.url}`);
   console.log(`file: entries/${r.file}`);
   if (r.links.length) {
     const linkStr = r.links.map(id => titleById[id] ? `${id} (${titleById[id]})` : id).join(", ");

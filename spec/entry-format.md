@@ -69,17 +69,15 @@ The body has no required structure.
 | `id` | yes | `kb-NNNN` | Matches filename. Stable identity. |
 | `title` | yes | string | Human title; drives the slug. |
 | `type` | yes | enum | Closed set — see below. |
+| `url` | no | string | A full URL (`https://...`). Required for `type: bookmark`; optional for others (e.g. a factual_reference with a source link). |
 | `tags` | no | list[string] | **Free-form.** Lowercase, hyphenated. Primary lexical-search and filter signal; matched as wildcards. `[]` if none. |
 | `links` | no | list[edge] | Curated graph edges; `rel` is a closed set. `[]` if none. |
 | `created` | yes | `YYYY-MM-DD` | Set once at add. |
 | `updated` | yes | `YYYY-MM-DD` | Bumped on edit. (For real history, use `git log --follow`.) |
 
-Keep frontmatter to these keys in v1. Extra metadata goes in the body, not new
-top-level keys, so the schema stays stable and greppable.
-
 ### `type` — closed enum (v1)
 
-Exactly these four values are valid. Anything else is a lint error. Extend the
+Exactly these five values are valid. Anything else is a lint error. Extend the
 set only by editing this spec.
 
 | `type` | Meaning |
@@ -88,6 +86,7 @@ set only by editing this spec.
 | `decision` | A choice made and its rationale ("chose X over Y because ..."). |
 | `pattern_convention` | A reusable pattern or convention. |
 | `lesson_learned` | A debugging insight or non-obvious gotcha. |
+| `bookmark` | A pointer to an external resource (URL). Body is optional notes/context about *why* you saved it. Requires `url:` field. |
 
 ### `tags` — free-form (open)
 
