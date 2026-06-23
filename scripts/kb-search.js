@@ -1,86 +1,67 @@
 #!/usr/bin/env node
 // kb-search.js — lexical search over the kb-data repo, for the /kb skill.
 //
-// Usage:  node kb-search.js "term1" "term2" ...
-//   The skill passes the user's query already expanded into terms (synonyms /
-//   related words). Each arg is one term; matching is case-insensitive and
-//   substring-based, scored per field.
-//
-// Reads data_dir from ~/.claude/kb-config.json, parses each entry's YAML
-// frontmatter directly (no grep — the data is structured), scores field
-// matches (title/tags > body), and prints ranked compact results plus link
-// targets so the caller needs no follow-up file reads. Node only; no git, no
-// grep/sed/awk. Output is plain text designed to be read by the model.
+// Usage:  node kb-search.js [--type <type>] "term1" "term2" ...
+//   Pass "*" as the sole term to list all (useful with --type).
 
-const fs = require("fs");
-const os = require("os");
-const path = require("path");
+import { readFileSync, readdirSync, existsSync } from "node:fs";
+import { homedir } from "node:os";
+import { join } from "node:path";
 
-function die(msg, code) {
-  console.log(msg);
-  process.exit(code);
+function die(msg, code = 1) {
+  console.error(msg);
+  process.exitCode = code;
+  process.exit();
 }
 
-// Parse args: terms are positional; --type <type> is an optional filter.
+// --- args ---
 let typeFilter = null;
-const rawArgs = process.argv.slice(2);
 const rawTerms = [];
-for (let i = 0; i < rawArgs.length; i++) {
-  if (rawArgs[i] === "--type") {
-    typeFilter = (rawArgs[++i] || "").toLowerCase();
+const args = process.argv.slice(2);
+for (let i = 0; i < args.length; i++) {
+  if (args[i] === "--type") {
+    typeFilter = (args[++i] ?? "").toLowerCase();
   } else {
-    rawTerms.push(rawArgs[i].toLowerCase().trim());
+    rawTerms.push(args[i].toLowerCase().trim());
   }
 }
-rawTerms.length ||
+if (rawTerms.length === 0) {
   die(
     "ERROR: no search terms given (pass terms, or --type <type> with at least one term or '*')",
     2,
   );
-// Special case: a single "*" term means "list all" (useful with --type to list all bookmarks, etc.)
+}
 const listAll = rawTerms.length === 1 && rawTerms[0] === "*";
 
-// Tokenize into individual words so a multi-word term like "software development"
-// still matches an entry containing only "software" (per-word scoring), instead of
-// requiring the whole phrase verbatim. Keep the original phrases too, for an
-// exact-phrase bonus. Drop 1-char tokens.
+// Tokenize multi-word terms into individual words for per-word scoring.
+// Keep original phrases too for an exact-phrase bonus.
 const STOP = new Set([
-  "the",
-  "a",
-  "an",
-  "of",
-  "for",
-  "to",
-  "and",
-  "or",
-  "in",
-  "on",
-  "is",
-  "it",
-  "with",
-  "how",
+  "the", "a", "an", "of", "for", "to", "and", "or", "in", "on", "is", "it",
+  "with", "how",
 ]);
 const words = new Set();
-for (const t of rawTerms)
-  for (const w of t.split(/[^a-z0-9]+/))
+for (const t of rawTerms) {
+  for (const w of t.split(/[^a-z0-9]+/)) {
     if (w.length > 1 && !STOP.has(w)) words.add(w);
-const phrases = rawTerms.filter((t) => /[^a-z0-9]/.test(t.trim())); // multi-word phrases only
+  }
+}
+const phrases = rawTerms.filter((t) => /[^a-z0-9]/.test(t.trim()));
 
-const configPath = path.join(os.homedir(), ".claude", "kb-config.json");
+// --- resolve data_dir ---
+const configPath = join(homedir(), ".claude", "kb-config.json");
 let dataDir;
 try {
-  const cfg = JSON.parse(fs.readFileSync(configPath, "utf8"));
-  dataDir = (cfg.data_dir || "").replace(/^~(?=$|\/)/, os.homedir());
+  const cfg = JSON.parse(readFileSync(configPath, "utf8"));
+  dataDir = (cfg.data_dir ?? "").replace(/^~(?=$|\/)/, homedir());
 } catch {
   die(`ERROR: cannot read ${configPath} (run /kb once to set data_dir)`, 3);
 }
-const entriesDir = path.join(dataDir, "entries");
-if (!dataDir || !fs.existsSync(entriesDir)) {
+const entriesDir = join(dataDir, "entries");
+if (!dataDir || !existsSync(entriesDir)) {
   die(`ERROR: data_dir invalid or has no entries/: '${dataDir}'`, 4);
 }
 
-// Minimal frontmatter parse: split on the first two `---` fences, pull the
-// scalar/list fields we care about. Avoids a YAML dependency for our flat schema.
+// --- parse entries ---
 function parseEntry(text) {
   const m = text.match(/^---\n([\s\S]*?)\n---\n?([\s\S]*)$/);
   if (!m) return null;
@@ -89,7 +70,7 @@ function parseEntry(text) {
     const r = fm.match(new RegExp(`^${k}:[ \\t]*(.*)$`, "m"));
     return r ? r[1].trim() : "";
   };
-  const tagsRaw = get("tags"); // e.g. "[a, b-c, d]"
+  const tagsRaw = get("tags");
   const tags = tagsRaw
     .replace(/^\[|\]$/g, "")
     .split(",")
@@ -110,23 +91,22 @@ function parseEntry(text) {
   };
 }
 
-// Parse every entry once. Keep an id->title map so we can resolve link targets
-// to human titles (graph context) without a second lookup.
-const files = fs.readdirSync(entriesDir).filter((f) => f.endsWith(".md"));
+const files = readdirSync(entriesDir).filter((f) => f.endsWith(".md"));
 const all = [];
 const titleById = {};
 for (const f of files) {
-  const e = parseEntry(fs.readFileSync(path.join(entriesDir, f), "utf8"));
+  const e = parseEntry(readFileSync(join(entriesDir, f), "utf8"));
   if (!e) continue;
   e.file = f;
   all.push(e);
   if (e.id) titleById[e.id] = e.title;
 }
 
-// Apply type filter, then score.
+// --- filter + score ---
 const pool = typeFilter ? all.filter((e) => e.type === typeFilter) : all;
-if (typeFilter && pool.length === 0)
+if (typeFilter && pool.length === 0) {
   die(`NO_MATCHES (no entries with type '${typeFilter}')`, 0);
+}
 
 const results = [];
 for (const e of pool) {
@@ -136,27 +116,15 @@ for (const e of pool) {
   }
   const titleL = e.title.toLowerCase();
   const tagsL = e.tags.join(" ").toLowerCase();
-  const urlL = (e.url || "").toLowerCase();
+  const urlL = (e.url ?? "").toLowerCase();
   const bodyL = e.body.toLowerCase();
   let score = 0;
   const why = new Set();
   for (const w of words) {
-    if (titleL.includes(w)) {
-      score += 5;
-      why.add("title");
-    }
-    if (tagsL.includes(w)) {
-      score += 3;
-      why.add("tag");
-    }
-    if (urlL.includes(w)) {
-      score += 3;
-      why.add("url");
-    }
-    if (bodyL.includes(w)) {
-      score += 1;
-      why.add("body");
-    }
+    if (titleL.includes(w)) { score += 5; why.add("title"); }
+    if (tagsL.includes(w)) { score += 3; why.add("tag"); }
+    if (urlL.includes(w)) { score += 3; why.add("url"); }
+    if (bodyL.includes(w)) { score += 1; why.add("body"); }
   }
   for (const p of phrases) {
     if (titleL.includes(p) || tagsL.includes(p) || bodyL.includes(p)) {
@@ -170,10 +138,9 @@ for (const e of pool) {
 if (results.length === 0) die("NO_MATCHES", 0);
 results.sort((a, b) => b.score - a.score);
 
-// Top hits get full body (entries are small + single-fact, so this lets the
-// caller answer in ONE call — no follow-up read). Rest get a one-line snippet.
+// --- output (stdout = data for the model to consume) ---
 const FULL_BODY_TOP = 3;
-results.forEach((r, i) => {
+for (const [i, r] of results.entries()) {
   console.log(`### ${r.id} — ${r.title}`);
   console.log(
     `type: ${r.type}   tags: [${r.tags.join(", ")}]   created: ${r.created}   updated: ${r.updated}   match: ${r.why} (score ${r.score})`,
@@ -191,7 +158,7 @@ results.forEach((r, i) => {
     console.log(r.body);
     console.log("---");
   } else {
-    console.log(`snippet: ${r.body.split("\n").find((l) => l.trim()) || ""}`);
+    console.log(`snippet: ${r.body.split("\n").find((l) => l.trim()) ?? ""}`);
   }
   console.log("");
-});
+}
