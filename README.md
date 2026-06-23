@@ -26,11 +26,6 @@ Pairs with a separate, private `kb-data` repo that holds the actual entries.
 `data_dir` comes only from `~/.claude/kb-config.json` (key `data_dir`). You can
 pre-write it yourself: `{ "data_dir": "/path/to/kb-data" }`.
 
-**Remote / sync:** `kb-data` starts local-only. The first time you run `/kb
-sync` with no remote, the skill asks you for a remote URL and wires it up (`git
-remote add` + push). The URL always comes from you — for sensitive content, use
-a private/internal git host. The skill never invents or guesses a remote.
-
 ## Usage
 
 | Command | What it does |
