@@ -21,27 +21,50 @@ const os = require("os");
 const path = require("path");
 const { execFileSync } = require("child_process");
 
-const REL = new Set(["relates_to", "part_of", "depends_on", "supersedes", "mentions"]);
-const TYPE = new Set(["factual_reference", "decision", "pattern_convention", "lesson_learned", "bookmark"]);
+const REL = new Set([
+  "relates_to",
+  "part_of",
+  "depends_on",
+  "supersedes",
+  "mentions",
+]);
+const TYPE = new Set([
+  "factual_reference",
+  "decision",
+  "pattern_convention",
+  "lesson_learned",
+  "bookmark",
+]);
 
-function die(msg, code = 1) { console.log(msg); process.exit(code); }
+function die(msg, code = 1) {
+  console.log(msg);
+  process.exit(code);
+}
 function git(dir, args, quiet = false) {
-  return execFileSync("git", ["-C", dir, ...args],
-    { encoding: "utf8", stdio: ["ignore", "pipe", quiet ? "ignore" : "inherit"] }).trim();
+  return execFileSync("git", ["-C", dir, ...args], {
+    encoding: "utf8",
+    stdio: ["ignore", "pipe", quiet ? "ignore" : "inherit"],
+  }).trim();
 }
 
 // --- args ---
-let slug = "", editId = null;
+let slug = "",
+  editId = null;
 for (let i = 2; i < process.argv.length; i++) {
   if (process.argv[i] === "--slug") slug = process.argv[++i] || "";
   else if (process.argv[i] === "--edit") editId = process.argv[++i] || "";
 }
 const editMode = editId !== null;
-if (editMode && !/^kb-\d+$/.test(editId)) die("ERROR: --edit needs an id like kb-0014", 2);
-slug = slug.trim().toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+if (editMode && !/^kb-\d+$/.test(editId))
+  die("ERROR: --edit needs an id like kb-0014", 2);
+slug = slug
+  .trim()
+  .toLowerCase()
+  .replace(/[^a-z0-9]+/g, "-")
+  .replace(/^-|-$/g, "");
 if (!editMode && !slug) die("ERROR: missing --slug", 2);
 
-const content = fs.readFileSync(0, "utf8");      // stdin
+const content = fs.readFileSync(0, "utf8"); // stdin
 if (editMode) {
   if (!new RegExp(`^id:\\s*${editId}\\s*$`, "m").test(content))
     die(`ERROR: stdin frontmatter id must be '${editId}' in edit mode`, 2);
@@ -53,17 +76,30 @@ if (editMode) {
 const configPath = path.join(os.homedir(), ".claude", "kb-config.json");
 let dataDir;
 try {
-  dataDir = (JSON.parse(fs.readFileSync(configPath, "utf8")).data_dir || "").replace(/^~(?=$|\/)/, os.homedir());
-} catch { die(`ERROR: cannot read ${configPath}`, 3); }
+  dataDir = (
+    JSON.parse(fs.readFileSync(configPath, "utf8")).data_dir || ""
+  ).replace(/^~(?=$|\/)/, os.homedir());
+} catch {
+  die(`ERROR: cannot read ${configPath}`, 3);
+}
 const entriesDir = path.join(dataDir, "entries");
 const manifest = path.join(dataDir, "kb.json");
-if (!fs.existsSync(path.join(dataDir, ".git"))) die(`ERROR: data_dir is not a git repo: '${dataDir}' (run /kb sync to bootstrap)`, 4);
-if (!fs.existsSync(entriesDir) || !fs.existsSync(manifest)) die(`ERROR: data_dir invalid (no entries/ or kb.json): '${dataDir}'`, 4);
+if (!fs.existsSync(path.join(dataDir, ".git")))
+  die(
+    `ERROR: data_dir is not a git repo: '${dataDir}' (run /kb sync to bootstrap)`,
+    4,
+  );
+if (!fs.existsSync(entriesDir) || !fs.existsSync(manifest))
+  die(`ERROR: data_dir invalid (no entries/ or kb.json): '${dataDir}'`, 4);
 
 // --- pull if an upstream is configured (best-effort) ---
 let pullNote = "";
 try {
-  git(dataDir, ["rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{u}"], true);
+  git(
+    dataDir,
+    ["rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{u}"],
+    true,
+  );
   git(dataDir, ["pull", "--quiet"], true);
 } catch {
   pullNote = "no upstream — local only";
@@ -71,66 +107,93 @@ try {
 // If pull left the repo in a conflicted/merging state, abort — don't commit on top of it.
 try {
   const mergeHead = path.join(dataDir, ".git", "MERGE_HEAD");
-  if (fs.existsSync(mergeHead)) die("ERROR: git pull left a merge conflict. Resolve it in the data repo, then retry.", 6);
-} catch (e) { if (e.code) throw e; /* re-throw die() exits */ }
+  if (fs.existsSync(mergeHead))
+    die(
+      "ERROR: git pull left a merge conflict. Resolve it in the data repo, then retry.",
+      6,
+    );
+} catch (e) {
+  if (e.code) throw e; /* re-throw die() exits */
+}
 
 // --- map existing files by id ---
 const fileById = {};
-for (const f of fs.readdirSync(entriesDir).filter(f => f.endsWith(".md"))) {
-  const m = f.match(/^(kb-\d+)/); if (m) fileById[m[1]] = f;
+for (const f of fs.readdirSync(entriesDir).filter((f) => f.endsWith(".md"))) {
+  const m = f.match(/^(kb-\d+)/);
+  if (m) fileById[m[1]] = f;
 }
 const existing = new Set(Object.keys(fileById));
 let kb;
-try { kb = JSON.parse(fs.readFileSync(manifest, "utf8")); }
-catch { die(`ERROR: kb.json is malformed (invalid JSON) at '${manifest}'`, 4); }
+try {
+  kb = JSON.parse(fs.readFileSync(manifest, "utf8"));
+} catch {
+  die(`ERROR: kb.json is malformed (invalid JSON) at '${manifest}'`, 4);
+}
 
 // --- determine id ---
 let id, final;
 if (editMode) {
-  if (!existing.has(editId)) die(`ERROR: ${editId} does not exist — nothing to edit`, 5);
+  if (!existing.has(editId))
+    die(`ERROR: ${editId} does not exist — nothing to edit`, 5);
   id = editId;
   final = content;
 } else {
   let n = kb.next_id || 1;
   id = `kb-${String(n).padStart(4, "0")}`;
-  while (existing.has(id)) { n++; id = `kb-${String(n).padStart(4, "0")}`; }
+  while (existing.has(id)) {
+    n++;
+    id = `kb-${String(n).padStart(4, "0")}`;
+  }
   kb.next_id = n + 1;
   final = content.replace(/^id:\s*__ID__\s*$/m, `id: ${id}`);
 }
 
 // --- validate against the spec ---
 const fm = (final.match(/^---\n([\s\S]*?)\n---/) || [, ""])[1];
-const get = k => {
+const get = (k) => {
   const m = fm.match(new RegExp(`^${k}:[ \\t]*(.*)$`, "m"));
   if (!m) return "";
-  return m[1].trim().replace(/^(['"])([\s\S]*)\1$/, "$2");  // strip surrounding YAML quotes
+  return m[1].trim().replace(/^(['"])([\s\S]*)\1$/, "$2"); // strip surrounding YAML quotes
 };
 const title = get("title");
-for (const k of ["title", "type", "created", "updated"]) if (!get(k)) die(`ERROR: missing required field '${k}'`, 5);
-if (!TYPE.has(get("type"))) die(`ERROR: type '${get("type")}' not in closed enum`, 5);
-if (get("type") === "bookmark" && !get("url")) die("ERROR: type 'bookmark' requires a `url:` field", 5);
-for (const r of [...fm.matchAll(/rel:[ \t]*(\S+)/g)]) if (!REL.has(r[1])) die(`ERROR: rel '${r[1]}' not in closed enum`, 5);
+for (const k of ["title", "type", "created", "updated"])
+  if (!get(k)) die(`ERROR: missing required field '${k}'`, 5);
+if (!TYPE.has(get("type")))
+  die(`ERROR: type '${get("type")}' not in closed enum`, 5);
+if (get("type") === "bookmark" && !get("url"))
+  die("ERROR: type 'bookmark' requires a `url:` field", 5);
+for (const r of [...fm.matchAll(/rel:[ \t]*(\S+)/g)])
+  if (!REL.has(r[1])) die(`ERROR: rel '${r[1]}' not in closed enum`, 5);
 for (const t of [...fm.matchAll(/to:[ \t]*(kb-\d+)/g)]) {
   if (t[1] === id) continue;
-  if (!existing.has(t[1])) die(`ERROR: link target ${t[1]} does not exist (dangling)`, 5);
+  if (!existing.has(t[1]))
+    die(`ERROR: link target ${t[1]} does not exist (dangling)`, 5);
 }
 
 // --- write (+ rename on slug change), bump manifest (add only) ---
 const oldFile = fileById[id];
-const file = slug ? `${id}-${slug}.md` : (oldFile || `${id}.md`);
+const file = slug ? `${id}-${slug}.md` : oldFile || `${id}.md`;
 const toAdd = [];
 // git mv stages the rename (both old + new paths) atomically; only the new
 // path needs a follow-up `git add` to capture the content change.
-if (editMode && oldFile && oldFile !== file) git(dataDir, ["mv", `entries/${oldFile}`, `entries/${file}`]);
-fs.writeFileSync(path.join(entriesDir, file), final.endsWith("\n") ? final : final + "\n");
+if (editMode && oldFile && oldFile !== file)
+  git(dataDir, ["mv", `entries/${oldFile}`, `entries/${file}`]);
+fs.writeFileSync(
+  path.join(entriesDir, file),
+  final.endsWith("\n") ? final : final + "\n",
+);
 toAdd.push(`entries/${file}`);
-if (!editMode) { fs.writeFileSync(manifest, JSON.stringify(kb, null, 2) + "\n"); toAdd.push("kb.json"); }
+if (!editMode) {
+  fs.writeFileSync(manifest, JSON.stringify(kb, null, 2) + "\n");
+  toAdd.push("kb.json");
+}
 
 // --- commit, then push (graceful) ---
 git(dataDir, ["add", ...toAdd]);
 // Check if there's actually anything to commit (edit with identical content → no-op).
-const status = execFileSync("git", ["-C", dataDir, "status", "--porcelain"],
-  { encoding: "utf8" }).trim();
+const status = execFileSync("git", ["-C", dataDir, "status", "--porcelain"], {
+  encoding: "utf8",
+}).trim();
 if (!status) {
   console.log(`NO_CHANGES ${id}`);
   console.log("The entry content is identical — nothing to commit.");
@@ -138,8 +201,13 @@ if (!status) {
 }
 git(dataDir, ["commit", "-m", `${editMode ? "edit" : "add"} ${id}: ${title}`]);
 let pushNote;
-try { git(dataDir, ["push"], true); pushNote = "pushed"; }
-catch { pushNote = "committed locally but NOT pushed (offline/auth/diverged) — run /kb sync later"; }
+try {
+  git(dataDir, ["push"], true);
+  pushNote = "pushed";
+} catch {
+  pushNote =
+    "committed locally but NOT pushed (offline/auth/diverged) — run /kb sync later";
+}
 
 console.log(`${editMode ? "EDITED" : "SAVED"} ${id}`);
 console.log(`file: entries/${file}`);

@@ -16,17 +16,27 @@ const fs = require("fs");
 const os = require("os");
 const path = require("path");
 
-function die(msg, code) { console.log(msg); process.exit(code); }
+function die(msg, code) {
+  console.log(msg);
+  process.exit(code);
+}
 
 // Parse args: terms are positional; --type <type> is an optional filter.
 let typeFilter = null;
 const rawArgs = process.argv.slice(2);
 const rawTerms = [];
 for (let i = 0; i < rawArgs.length; i++) {
-  if (rawArgs[i] === "--type") { typeFilter = (rawArgs[++i] || "").toLowerCase(); }
-  else { rawTerms.push(rawArgs[i].toLowerCase().trim()); }
+  if (rawArgs[i] === "--type") {
+    typeFilter = (rawArgs[++i] || "").toLowerCase();
+  } else {
+    rawTerms.push(rawArgs[i].toLowerCase().trim());
+  }
 }
-rawTerms.length || die("ERROR: no search terms given (pass terms, or --type <type> with at least one term or '*')", 2);
+rawTerms.length ||
+  die(
+    "ERROR: no search terms given (pass terms, or --type <type> with at least one term or '*')",
+    2,
+  );
 // Special case: a single "*" term means "list all" (useful with --type to list all bookmarks, etc.)
 const listAll = rawTerms.length === 1 && rawTerms[0] === "*";
 
@@ -34,10 +44,27 @@ const listAll = rawTerms.length === 1 && rawTerms[0] === "*";
 // still matches an entry containing only "software" (per-word scoring), instead of
 // requiring the whole phrase verbatim. Keep the original phrases too, for an
 // exact-phrase bonus. Drop 1-char tokens.
-const STOP = new Set(["the","a","an","of","for","to","and","or","in","on","is","it","with","how"]);
+const STOP = new Set([
+  "the",
+  "a",
+  "an",
+  "of",
+  "for",
+  "to",
+  "and",
+  "or",
+  "in",
+  "on",
+  "is",
+  "it",
+  "with",
+  "how",
+]);
 const words = new Set();
-for (const t of rawTerms) for (const w of t.split(/[^a-z0-9]+/)) if (w.length > 1 && !STOP.has(w)) words.add(w);
-const phrases = rawTerms.filter(t => /[^a-z0-9]/.test(t.trim()));  // multi-word phrases only
+for (const t of rawTerms)
+  for (const w of t.split(/[^a-z0-9]+/))
+    if (w.length > 1 && !STOP.has(w)) words.add(w);
+const phrases = rawTerms.filter((t) => /[^a-z0-9]/.test(t.trim())); // multi-word phrases only
 
 const configPath = path.join(os.homedir(), ".claude", "kb-config.json");
 let dataDir;
@@ -63,16 +90,29 @@ function parseEntry(text) {
     return r ? r[1].trim() : "";
   };
   const tagsRaw = get("tags"); // e.g. "[a, b-c, d]"
-  const tags = tagsRaw.replace(/^\[|\]$/g, "").split(",").map(s => s.trim()).filter(Boolean);
-  const links = [...fm.matchAll(/to:[ \t]*(kb-\d+)/g)].map(x => x[1]);
+  const tags = tagsRaw
+    .replace(/^\[|\]$/g, "")
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean);
+  const links = [...fm.matchAll(/to:[ \t]*(kb-\d+)/g)].map((x) => x[1]);
   const url = get("url") || null;
-  return { id: get("id"), title: get("title"), type: get("type"), url, tags, links,
-    created: get("created"), updated: get("updated"), body: body.trim() };
+  return {
+    id: get("id"),
+    title: get("title"),
+    type: get("type"),
+    url,
+    tags,
+    links,
+    created: get("created"),
+    updated: get("updated"),
+    body: body.trim(),
+  };
 }
 
 // Parse every entry once. Keep an id->title map so we can resolve link targets
 // to human titles (graph context) without a second lookup.
-const files = fs.readdirSync(entriesDir).filter(f => f.endsWith(".md"));
+const files = fs.readdirSync(entriesDir).filter((f) => f.endsWith(".md"));
 const all = [];
 const titleById = {};
 for (const f of files) {
@@ -84,12 +124,16 @@ for (const f of files) {
 }
 
 // Apply type filter, then score.
-const pool = typeFilter ? all.filter(e => e.type === typeFilter) : all;
-if (typeFilter && pool.length === 0) die(`NO_MATCHES (no entries with type '${typeFilter}')`, 0);
+const pool = typeFilter ? all.filter((e) => e.type === typeFilter) : all;
+if (typeFilter && pool.length === 0)
+  die(`NO_MATCHES (no entries with type '${typeFilter}')`, 0);
 
 const results = [];
 for (const e of pool) {
-  if (listAll) { results.push({ ...e, score: 1, why: "list-all" }); continue; }
+  if (listAll) {
+    results.push({ ...e, score: 1, why: "list-all" });
+    continue;
+  }
   const titleL = e.title.toLowerCase();
   const tagsL = e.tags.join(" ").toLowerCase();
   const urlL = (e.url || "").toLowerCase();
@@ -97,13 +141,28 @@ for (const e of pool) {
   let score = 0;
   const why = new Set();
   for (const w of words) {
-    if (titleL.includes(w)) { score += 5; why.add("title"); }
-    if (tagsL.includes(w))  { score += 3; why.add("tag"); }
-    if (urlL.includes(w))   { score += 3; why.add("url"); }
-    if (bodyL.includes(w))  { score += 1; why.add("body"); }
+    if (titleL.includes(w)) {
+      score += 5;
+      why.add("title");
+    }
+    if (tagsL.includes(w)) {
+      score += 3;
+      why.add("tag");
+    }
+    if (urlL.includes(w)) {
+      score += 3;
+      why.add("url");
+    }
+    if (bodyL.includes(w)) {
+      score += 1;
+      why.add("body");
+    }
   }
   for (const p of phrases) {
-    if (titleL.includes(p) || tagsL.includes(p) || bodyL.includes(p)) { score += 4; why.add("phrase"); }
+    if (titleL.includes(p) || tagsL.includes(p) || bodyL.includes(p)) {
+      score += 4;
+      why.add("phrase");
+    }
   }
   if (score > 0) results.push({ ...e, score, why: [...why].join("+") });
 }
@@ -116,11 +175,15 @@ results.sort((a, b) => b.score - a.score);
 const FULL_BODY_TOP = 3;
 results.forEach((r, i) => {
   console.log(`### ${r.id} — ${r.title}`);
-  console.log(`type: ${r.type}   tags: [${r.tags.join(", ")}]   created: ${r.created}   updated: ${r.updated}   match: ${r.why} (score ${r.score})`);
+  console.log(
+    `type: ${r.type}   tags: [${r.tags.join(", ")}]   created: ${r.created}   updated: ${r.updated}   match: ${r.why} (score ${r.score})`,
+  );
   if (r.url) console.log(`url: ${r.url}`);
   console.log(`file: entries/${r.file}`);
   if (r.links.length) {
-    const linkStr = r.links.map(id => titleById[id] ? `${id} (${titleById[id]})` : id).join(", ");
+    const linkStr = r.links
+      .map((id) => (titleById[id] ? `${id} (${titleById[id]})` : id))
+      .join(", ");
     console.log(`links: ${linkStr}`);
   }
   if (i < FULL_BODY_TOP) {
@@ -128,7 +191,7 @@ results.forEach((r, i) => {
     console.log(r.body);
     console.log("---");
   } else {
-    console.log(`snippet: ${r.body.split("\n").find(l => l.trim()) || ""}`);
+    console.log(`snippet: ${r.body.split("\n").find((l) => l.trim()) || ""}`);
   }
   console.log("");
 });

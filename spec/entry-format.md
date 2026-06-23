@@ -64,29 +64,29 @@ The body has no required structure.
 
 ### Fields
 
-| Field | Required | Type | Notes |
-|---|---|---|---|
-| `id` | yes | `kb-NNNN` | Matches filename. Stable identity. |
-| `title` | yes | string | Human title; drives the slug. |
-| `type` | yes | enum | Closed set — see below. |
-| `url` | no | string | A full URL (`https://...`). Required for `type: bookmark`; optional for others (e.g. a factual_reference with a source link). |
-| `tags` | no | list[string] | **Free-form.** Lowercase, hyphenated. Primary lexical-search and filter signal; matched as wildcards. `[]` if none. |
-| `links` | no | list[edge] | Curated graph edges; `rel` is a closed set. `[]` if none. |
-| `created` | yes | `YYYY-MM-DD` | Set once at add. |
-| `updated` | yes | `YYYY-MM-DD` | Bumped on edit. (For real history, use `git log --follow`.) |
+| Field     | Required | Type         | Notes                                                                                                                         |
+| --------- | -------- | ------------ | ----------------------------------------------------------------------------------------------------------------------------- |
+| `id`      | yes      | `kb-NNNN`    | Matches filename. Stable identity.                                                                                            |
+| `title`   | yes      | string       | Human title; drives the slug.                                                                                                 |
+| `type`    | yes      | enum         | Closed set — see below.                                                                                                       |
+| `url`     | no       | string       | A full URL (`https://...`). Required for `type: bookmark`; optional for others (e.g. a factual_reference with a source link). |
+| `tags`    | no       | list[string] | **Free-form.** Lowercase, hyphenated. Primary lexical-search and filter signal; matched as wildcards. `[]` if none.           |
+| `links`   | no       | list[edge]   | Curated graph edges; `rel` is a closed set. `[]` if none.                                                                     |
+| `created` | yes      | `YYYY-MM-DD` | Set once at add.                                                                                                              |
+| `updated` | yes      | `YYYY-MM-DD` | Bumped on edit. (For real history, use `git log --follow`.)                                                                   |
 
 ### `type` — closed enum (v1)
 
 Exactly these five values are valid. Anything else is a lint error. Extend the
 set only by editing this spec.
 
-| `type` | Meaning |
-|---|---|
-| `factual_reference` | A fact, definition, or description of a thing. |
-| `decision` | A choice made and its rationale ("chose X over Y because ..."). |
-| `pattern_convention` | A reusable pattern or convention. |
-| `lesson_learned` | A debugging insight or non-obvious gotcha. |
-| `bookmark` | A pointer to an external resource (URL). Body is optional notes/context about *why* you saved it. Requires `url:` field. |
+| `type`               | Meaning                                                                                                                  |
+| -------------------- | ------------------------------------------------------------------------------------------------------------------------ |
+| `factual_reference`  | A fact, definition, or description of a thing.                                                                           |
+| `decision`           | A choice made and its rationale ("chose X over Y because ...").                                                          |
+| `pattern_convention` | A reusable pattern or convention.                                                                                        |
+| `lesson_learned`     | A debugging insight or non-obvious gotcha.                                                                               |
+| `bookmark`           | A pointer to an external resource (URL). Body is optional notes/context about _why_ you saved it. Requires `url:` field. |
 
 ### `tags` — free-form (open)
 
@@ -111,13 +111,13 @@ Exactly these five values are valid. This is deliberate — the old KB sprawled 
 60+ one-off relationship types, which made edge-typed traversal unreliable.
 Extend the set only by editing this spec.
 
-| `rel` | Direction / meaning |
-|---|---|
+| `rel`        | Direction / meaning                                           |
+| ------------ | ------------------------------------------------------------- |
 | `relates_to` | Generic association. Symmetric in meaning; still stored once. |
-| `part_of` | Source is a component/subset of target. |
-| `depends_on` | Source requires or builds on target. |
-| `supersedes` | Source replaces target (how decisions evolve over time). |
-| `mentions` | Source references target in passing. |
+| `part_of`    | Source is a component/subset of target.                       |
+| `depends_on` | Source requires or builds on target.                          |
+| `supersedes` | Source replaces target (how decisions evolve over time).      |
+| `mentions`   | Source references target in passing.                          |
 
 #### Edge rules
 

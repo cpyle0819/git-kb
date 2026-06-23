@@ -12,6 +12,7 @@ models a lightweight knowledge graph (typed edges from a closed 5-rel vocab)
 traversed at search time for related-entry discovery.
 
 **Trade-offs vs. alternatives:**
+
 - vs. **graph databases** (Neo4j, Neptune): no infra, no query language, no ops —
   but traversal is shallow (1-hop at search, manual for deeper). Graph edges are
   explicit and reviewable in diffs; a graph DB auto-extracts richer structure but
@@ -51,10 +52,9 @@ pre-write it yourself: `{ "data_dir": "/path/to/kb-data" }`.
 
 ## Usage
 
-| Command | What it does |
-|---|---|
-| `/kb add <knowledge>` | Draft an entry from freeform text (or a file/URL), confirm, commit+push. |
-| `/kb search <query>` | Lexical search with query expansion; returns ranked results with full bodies. Use `--type bookmark` to filter. |
+| Command                                 | What it does                                                                                                                 |
+| --------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
+| `/kb add <knowledge>`                   | Draft an entry from freeform text (or a file/URL), confirm, commit+push.                                                     |
+| `/kb search <query>`                    | Lexical search with query expansion; returns ranked results with full bodies. Use `--type bookmark` to filter.               |
 | `/kb edit <id or description> <change>` | Modify an existing entry in place (factual corrections). For replaced decisions, use `add` with a `supersedes` link instead. |
-| `/kb sync` | Pull + push. On first run with no remote, offers to wire one up. |
-
+| `/kb sync`                              | Pull + push. On first run with no remote, offers to wire one up.                                                             |

@@ -1,7 +1,7 @@
 ---
 name: kb
 description: Manage a git-backed personal knowledge base (add / search / edit / sync). Invoke for "/kb add <knowledge>", "/kb search <query>", "/kb edit <id> <change>", "/kb sync".
-argument-hint: <verb> <content>   # verb = add|search|edit|sync
+argument-hint: <verb> <content> # verb = add|search|edit|sync
 model: sonnet
 allowed-tools: Read, Bash(node ${CLAUDE_SKILL_DIR}/scripts/kb-search.js *), Bash(node ${CLAUDE_SKILL_DIR}/scripts/kb-save.js *), Bash(node ${CLAUDE_SKILL_DIR}/scripts/kb-sync.js *)
 ---
@@ -19,6 +19,7 @@ the payload is what remains. If the verb is none of these, tell the user the
 valid verbs and stop (no natural-language fallback in v1).
 
 **Do NOT do any setup up front.** Each verb does exactly the setup it needs:
+
 - `search` — needs nothing first. The helper script resolves `data_dir` and
   validates it itself. Just run it (below).
 - `add` — needs the spec (to write a valid entry); helper handles `data_dir`/git.
@@ -64,7 +65,7 @@ thesis, separate entries for distinct findings, joined with `part_of` /
      reusable rule; otherwise `factual_reference`.
    - `url` (frontmatter field) — required for `bookmark`, optional for others.
    - `title` + a concise markdown body (for bookmarks: body is optional
-     notes/context about *why* you saved it).
+     notes/context about _why_ you saved it).
    - `tags` (free-form).
    - `links` — closed `rel` set only; `to:` only ids confirmed in step 2.
      **`rel` guidance:** `supersedes` ONLY when `to:` is the specific entry being
@@ -76,7 +77,7 @@ thesis, separate entries for distinct findings, joined with `part_of` /
      parent / dependency (a component is `part_of` its system; a tool that reads
      another's data `depends_on` it). If a directional rel would read backwards,
      flip the direction — don't downgrade to `relates_to`. Reserve `relates_to`
-     for when no directional rel fits *either way* (peer ties, person↔team
+     for when no directional rel fits _either way_ (peer ties, person↔team
      leadership). Torn between two rels in the SAME direction → prefer the weaker.
    - `created`/`updated` = today.
 4. **Show the user the drafted entry and proposed links; get confirmation**
@@ -196,7 +197,7 @@ future calls read it directly.
 - **Never commit secrets/credentials** — git history is permanent.
 - Keep one entry per file; one logical fact per entry.
 - **State what a thing IS, not what it isn't.** Write positively. If someone is
-  *not* a manager, don't say "not a manager" — say their actual role.
+  _not_ a manager, don't say "not a manager" — say their actual role.
 - **Minimize tool calls.** The search helper already returns full bodies + link
   titles. Do not re-read files the helper already returned. Do not read the spec
   file for edit (the rules are in this skill). One search + one save = the
