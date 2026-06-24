@@ -65,14 +65,14 @@ function resolveDataDir() {
     dataDir = (cfg.data_dir ?? "").replace(/^~(?=$|\/)/, homedir());
   } catch {
     return {
-      error: `ERROR: cannot read ${configPath} (run /kb once to set data_dir)`,
+      error: `ERROR: cannot read ${configPath} (run /kb init to set up the data repo)`,
       code: 3,
     };
   }
   const entriesDir = join(dataDir, "entries");
   if (!dataDir || !existsSync(entriesDir)) {
     return {
-      error: `ERROR: data_dir invalid or has no entries/: '${dataDir}'`,
+      error: `ERROR: data_dir invalid or has no entries/: '${dataDir}' (run /kb init)`,
       code: 4,
     };
   }

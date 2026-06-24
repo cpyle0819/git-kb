@@ -52,19 +52,22 @@ function resolveDataDir() {
     const cfg = JSON.parse(readFileSync(configPath, "utf8"));
     dataDir = (cfg.data_dir ?? "").replace(/^~(?=$|\/)/, homedir());
   } catch {
-    return { error: `ERROR: cannot read ${configPath}`, code: 3 };
+    return {
+      error: `ERROR: cannot read ${configPath} (run /kb init to set up the data repo)`,
+      code: 3,
+    };
   }
   const entriesDir = join(dataDir, "entries");
   const manifest = join(dataDir, "kb.json");
   if (!existsSync(join(dataDir, ".git"))) {
     return {
-      error: `ERROR: data_dir is not a git repo: '${dataDir}' (run git init there, or let /kb bootstrap it)`,
+      error: `ERROR: data_dir is not a git repo: '${dataDir}' (run /kb init)`,
       code: 4,
     };
   }
   if (!existsSync(entriesDir) || !existsSync(manifest)) {
     return {
-      error: `ERROR: data_dir invalid (no entries/ or kb.json): '${dataDir}'`,
+      error: `ERROR: data_dir invalid (no entries/ or kb.json): '${dataDir}' (run /kb init)`,
       code: 4,
     };
   }

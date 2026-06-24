@@ -41,18 +41,21 @@ traversed at search time for related-entry discovery.
 
 1. Symlink (or clone) this repo as a personal skill:
    `ln -s "$PWD" ~/.claude/skills/kb`
-2. Run `/kb add <knowledge>` (or any verb). On first use it asks where your
-   `kb-data` repo lives and saves the answer to `~/.claude/kb-config.json`.
-   It will create + `git init` the repo for you if the path doesn't exist (or
-   isn't yet a repo) — confirming first.
+2. Run `/kb init` once. It points the KB at its `kb-data` repo — clone an
+   existing one from a URL, register a local clone you already have, or start a
+   fresh repo — and saves the resolved path to `~/.claude/kb-config.json`. It
+   confirms before any clone/init.
 
 `data_dir` comes only from `~/.claude/kb-config.json` (key `data_dir`). You can
-pre-write it yourself: `{ "data_dir": "/path/to/kb-data" }`.
+pre-write it yourself instead of running init: `{ "data_dir": "/path/to/kb-data" }`.
+The other verbs never set it up — if it's missing, they stop and point you at
+`/kb init`.
 
 ## Usage
 
 | Command                                 | What it does                                                                                                                 |
 | --------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
+| `/kb init`                              | One-time setup: point the KB at its `kb-data` repo (clone URL, existing local clone, or new repo) and write the config.       |
 | `/kb add <knowledge>`                   | Draft an entry from freeform text (or a file/URL), save + commit + push.                                                     |
 | `/kb search <query>`                    | Lexical search with query expansion; returns ranked results with full bodies. Use `--type bookmark` to filter.               |
 | `/kb edit <id or description> <change>` | Modify an existing entry in place (factual corrections). For replaced decisions, use `add` with a `supersedes` link instead. |

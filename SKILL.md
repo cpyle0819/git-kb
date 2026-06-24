@@ -1,10 +1,10 @@
 ---
 name: kb
-description: Manage a git-backed personal knowledge base (add / search / edit). Invoke for "/kb add <knowledge>", "/kb search <query>", "/kb edit <id> <change>".
-argument-hint: <verb> <content> # verb = add|search|edit
+description: Manage a git-backed personal knowledge base (init / add / search / edit). Invoke for "/kb init", "/kb add <knowledge>", "/kb search <query>", "/kb edit <id> <change>".
+argument-hint: <verb> <content> # verb = init|add|search|edit
 model: sonnet
 effort: low
-allowed-tools: Read, Bash(node ${CLAUDE_SKILL_DIR}/scripts/kb-search.js *), Bash(node ${CLAUDE_SKILL_DIR}/scripts/kb-save.js *)
+allowed-tools: Read, Write(~/.claude/kb-config.json), Bash(node ${CLAUDE_SKILL_DIR}/scripts/kb-search.js *), Bash(node ${CLAUDE_SKILL_DIR}/scripts/kb-save.js *)
 ---
 
 # /kb — git-backed knowledge base
@@ -15,12 +15,15 @@ git is the persistence layer and the markdown files are the source of truth.
 
 ## Dispatch first — do only what the verb needs
 
-The first token of `$ARGUMENTS` is the verb: `add`, `search`, or `edit`;
-the payload is what remains. If the verb is none of these, tell the user the
-valid verbs and stop (no natural-language fallback in v1).
+The first token of `$ARGUMENTS` is the verb: `init`, `add`, `search`, or
+`edit`; the payload is what remains. If the verb is none of these, tell the
+user the valid verbs and stop (no natural-language fallback in v1).
 
 **Do NOT do any setup up front.** Each verb does exactly the setup it needs:
 
+- `init` — the one explicit setup step: point the KB at its `data_dir` (clone
+  an existing repo, register an existing local clone, or start a fresh one) and
+  write `~/.claude/kb-config.json`. See [init](#init--set-up-the-data-repo).
 - `search` — needs nothing first. The helper script resolves `data_dir` and
   validates it itself. Just run it (below).
 - `add` — needs the spec (to write a valid entry); helper handles `data_dir`/git.
@@ -28,8 +31,49 @@ valid verbs and stop (no natural-language fallback in v1).
 
 `data_dir` is the local clone of the **kb-data** repo (holds `entries/` and
 `kb.json`), read only from **`~/.claude/kb-config.json`** (key `data_dir`;
-resolve `~`). When `add`/`edit` need it, resolve/bootstrap per
-[Resolve & bootstrap data_dir](#resolve--bootstrap-data_dir) below.
+resolve `~`). It is set up only by `init`.
+
+**Not configured yet?** `search`/`add`/`edit` each run a helper that resolves
+`data_dir` itself. If a helper exits with a `data_dir` `ERROR:` (config missing,
+path absent, or not a valid repo), stop and point the user to `/kb init`:
+
+> KB isn't set up yet. Run `/kb init` to point it at your kb-data repo
+> (clone URL, an existing local clone, or a new repo).
+
+---
+
+### init — set up the data repo
+
+Payload: optional (a clone URL, a local path, or instructions). This is the
+single place `data_dir` gets configured. Goal: end with a valid kb-data repo
+(holds `entries/` + `kb.json`) and `~/.claude/kb-config.json` pointing at it.
+
+1. **Read the current config** at `~/.claude/kb-config.json` (resolve `~`).
+   - **Already configured** (`data_dir` set to a valid repo): tell the user
+     what it points at and ask whether they want to change it. If no, stop —
+     setup is already done. If yes, continue as if unset, using their new
+     answer.
+   - **Not configured** (file/key missing, or path is absent/not a repo): ask
+     the user how they want to provide the data repo, unless the payload
+     already answers it. The three ways:
+     - **Clone an existing repo** — they give a clone URL (and optionally a
+       target path). Run the clone (e.g. `git clone <url> <path>`, or whatever
+       custom command they specify — some hosts need a non-`git` clone). For a
+       sensitive KB the URL should be an internal git host.
+     - **Register an existing local clone** — they give a path that is already
+       a kb-data repo (they cloned it themselves). Use it as-is.
+     - **Start a new repo** — they give a target path with nothing there yet.
+       Create it: `mkdir -p <path>`, `git init <path>`, create `entries/` and
+       `kb.json` (`{"schema_version": 1, "next_id": 1}`). No remote — the
+       skill prompts for one on the first `NO_REMOTE` push.
+2. **Confirm before any clone / init / mkdir** — these create or fetch
+   directories. State exactly what you'll run and where, then do it.
+3. **Validate** the resulting path is a git repo containing `entries/` and
+   `kb.json`. If a freshly cloned/registered repo lacks them, tell the user the
+   path isn't a kb-data repo and stop — don't silently scaffold over it.
+4. **Write the config**: `{"data_dir": "<resolved-absolute-path>"}` to
+   `~/.claude/kb-config.json` (this is the only file the skill writes directly).
+   Then confirm setup is complete and that `add`/`search`/`edit` now work.
 
 ---
 
@@ -88,7 +132,7 @@ thesis, separate entries for distinct findings, joined with `part_of` /
    file, bumps `kb.json`, commits, and pushes. It prints `SAVED kb-NNNN ...`
    with a `push:` line (a failed push keeps the local commit — relay that and
    suggest retrying later). If it prints an `ERROR:` line, fix the entry and retry;
-   if the error is about `data_dir`, resolve/bootstrap it (see bottom) first.
+   if the error is about `data_dir`, stop and point the user to `/kb init`.
 
    **Splitting into multiple entries:** the helper assigns each id at save time,
    so you can't reference a sibling's id before it exists. Save the **anchor**
@@ -139,7 +183,8 @@ pull, no spec, no file reads. The helper does all of that. Two steps only:
    The top hits include their **full body**, and `links:` are resolved to target
    titles — so you have everything to answer AND to offer related entries in one
    call. Special outputs: `NO_MATCHES` (nothing matched) or a line starting
-   `ERROR:` — only THEN resolve/bootstrap `data_dir` (see bottom) and retry.
+   `ERROR:` — a `data_dir` `ERROR:` means setup is incomplete; stop and point
+   the user to `/kb init`.
 2. Answer the user's question directly from the returned content (the top hits'
    full bodies are already present — do NOT read files again). Then, if useful,
    mention the resolved `links:` as related entries to explore. Only read a full
@@ -160,26 +205,6 @@ from them — for sensitive data, use an internal git host). On their confirmati
 This adds `origin`, pushes all commits, and sets upstream. Never invent a URL.
 
 ---
-
-## Resolve & bootstrap data_dir
-
-(All helpers resolve `data_dir` from the config themselves. You only need this
-section when a helper exits with a `data_dir` `ERROR:` — i.e. the config is
-missing or the path isn't a valid repo yet — to bootstrap it, then retry.)
-
-Read `data_dir` from `~/.claude/kb-config.json` (resolve `~`). Then:
-
-1. **Path exists and IS a git repo** → use it.
-2. **Config/key missing** → ask the user for the path. Then apply 3/4 below, and
-   write `{"data_dir": "<path>"}` to `~/.claude/kb-config.json`.
-3. **Path does NOT exist** → offer to create+init: `mkdir -p <path>`, `git init`,
-   create `entries/` and `kb.json` (`{"schema_version": 1, "next_id": 1}`).
-4. **Path exists but is NOT a git repo** → offer to `git init` in place and
-   create `entries/` + `kb.json` if absent.
-
-Always confirm before creating/initializing. No remote is set — that's the
-user's to add later (the skill prompts on first `NO_REMOTE`). Once valid, save the path to the config so
-future calls read it directly.
 
 ## Rules
 
