@@ -9,9 +9,12 @@
 
 import { readFileSync, readdirSync, existsSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
-import { join } from "node:path";
+import { join, dirname } from "node:path";
 import { execFileSync } from "node:child_process";
 import { parseArgs } from "node:util";
+import { fileURLToPath } from "node:url";
+
+const __dirname = dirname(fileURLToPath(import.meta.url));
 
 // ─── Core ────────────────────────────────────────────────────────────────────
 
@@ -333,3 +336,14 @@ const result = save(content, {
 if (result.error) die(result.error, result.code);
 
 console.log(formatResult(result, pullResult.pullNote));
+
+// Rebuild the keyword index after successful save/edit
+if (result.status === "saved" || result.status === "edited") {
+  try {
+    execFileSync("node", [join(__dirname, "kb-build-index.js")], {
+      stdio: ["ignore", "ignore", "ignore"],
+    });
+  } catch {
+    // Non-fatal — index rebuild failure shouldn't block the save
+  }
+}

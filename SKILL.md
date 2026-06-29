@@ -4,7 +4,7 @@ description: Manage a git-backed personal knowledge base (init / add / search / 
 argument-hint: <verb> <content> # verb = init|add|search|edit
 model: sonnet
 effort: low
-allowed-tools: Read, Write(~/.claude/kb-config.json), Bash(node ${CLAUDE_SKILL_DIR}/scripts/kb-search.js *), Bash(node ${CLAUDE_SKILL_DIR}/scripts/kb-save.js *)
+allowed-tools: Read, Write(~/.claude/kb-config.json), Bash(node ${CLAUDE_SKILL_DIR}/scripts/kb-search.js *), Bash(node ${CLAUDE_SKILL_DIR}/scripts/kb-save.js *), Bash(node ${CLAUDE_SKILL_DIR}/scripts/kb-build-index.js)
 ---
 
 # /kb — git-backed knowledge base
@@ -73,6 +73,10 @@ single place `data_dir` gets configured. Goal: end with a valid kb-data repo
    path isn't a kb-data repo and stop — don't silently scaffold over it.
 4. **Write the config**: `{"data_dir": "<resolved-absolute-path>"}` to
    `~/.claude/kb-config.json` (this is the only file the skill writes directly).
+5. **Build the search index**: run
+   `node ${CLAUDE_SKILL_DIR}/scripts/kb-build-index.js` — this generates
+   `kb-index.json` (used by the auto-trigger hook to decide when to inject KB
+   context) and ensures it's gitignored in the data repo.
    Then confirm setup is complete and that `add`/`search`/`edit` now work.
 
 ---

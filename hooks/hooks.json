@@ -1,0 +1,12 @@
+{
+  "UserPromptSubmit": [
+    {
+      "hooks": [
+        {
+          "type": "command",
+          "command": "node ${CLAUDE_SKILL_DIR}/scripts/kb-trigger.js"
+        }
+      ]
+    }
+  ]
+}
