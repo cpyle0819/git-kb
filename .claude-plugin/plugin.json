@@ -1,0 +1,5 @@
+{
+  "name": "kb",
+  "version": "1.0.0",
+  "description": "Git-backed personal knowledge base with automatic context injection"
+}
