@@ -50,7 +50,8 @@ function readPrompt() {
 
   try {
     const parsed = JSON.parse(raw);
-    return parsed.tool_input?.user_message
+    return parsed.prompt
+      ?? parsed.tool_input?.user_message
       ?? parsed.user_message
       ?? parsed.input
       ?? parsed.message
