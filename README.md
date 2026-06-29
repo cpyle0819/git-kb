@@ -1,61 +1,75 @@
-# kb-system
+# kb
 
-A git-backed personal knowledge base, packaged as a Claude Code **skill** (`/kb`).
-Pairs with a separate, private `kb-data` repo that holds the actual entries.
+A Claude Code plugin for maintaining a personal knowledge base in plain markdown
+and git. Entries live in a separate private `kb-data` repo; this repo is the
+system — skill definition, scripts, hook, and spec.
 
-No database, no server, no embeddings. Entries are plain markdown files with YAML
-frontmatter; git is the persistence layer (commit = durable, `git log` = free
-history). Search is lexical: a Node.js helper reads all entries, parses
-frontmatter, and scores term matches per field — with LLM query expansion at
-invocation to recover semantic recall. A curated `links:` block in frontmatter
-models a lightweight knowledge graph (typed edges from a closed 5-rel vocab)
-traversed at search time for related-entry discovery.
+No database, no server, no embeddings. Git is the persistence layer. Search is
+lexical with LLM query expansion at invocation. A `links:` block in frontmatter
+models a lightweight knowledge graph (5-rel closed vocab, directed edges,
+traversed at search time).
 
-**Trade-offs vs. alternatives:**
+## Two layers of access
 
-- vs. **graph databases** (Neo4j, Neptune): no infra, no query language, no ops —
-  but traversal is shallow (1-hop at search, manual for deeper). Graph edges are
-  explicit and reviewable in diffs; a graph DB auto-extracts richer structure but
-  needs a running service and its edges are opaque.
-- vs. **vector/embedding RAG**: no model dependency, no reindexing on model
-  change, no binary artifacts — but recall depends on good tags + LLM expansion
-  rather than learned similarity. At personal scale (~50–5000 entries), brute
-  lexical search in <100ms is faster than an embedding lookup anyway.
-- vs. **DB-backed MCP/tool servers** (e.g. SQLite + vector store behind an API):
-  no daemon, no binary DB, no write-path code, no schema migrations — but gives
-  up hybrid BM25+vector scoring and agentic multi-hop retrieval loops. Data is
-  fully portable (any tool that reads markdown can use it); a DB-backed approach
-  locks data inside a binary store that only its server can query.
+**Automatic (hook).** A `UserPromptSubmit` hook tokenizes every prompt against a
+keyword index built from entry tags and titles. When 2+ keywords match, the top
+results inject as context before Claude responds. <10ms on non-matching prompts;
+~50–100ms when it fires. Never fires on short or mechanical prompts (commits,
+slash commands, lint fixes). The index rebuilds after every add/edit.
 
-## Layout (this repo IS the skill directory)
-
-- `SKILL.md` — the `/kb` skill (add / search / edit). `${CLAUDE_SKILL_DIR}`
-  resolves to this directory, so the bundled spec and scripts are always findable.
-- `spec/entry-format.md` — the entry file-format contract (closed enums for type
-  and rel, frontmatter schema, file-naming rules).
-- `scripts/` — Node.js helpers (allowlisted via `allowed-tools`):
-  - `kb-search.js` — parses all entries, scores by field, prints ranked results.
-  - `kb-save.js` — writes/validates/commits/pushes entries (add + edit + first-time remote setup).
+**Intentional (skill).** `/kb search <query>` with full LLM query expansion for
+semantic recall. `/kb add`, `/kb edit` for writes.
 
 ## Install
 
-1. Symlink (or clone) this repo as a personal skill:
-   `ln -s "$PWD" ~/.claude/skills/kb`
-2. Run `/kb init` once. It points the KB at its `kb-data` repo — clone an
-   existing one from a URL, register a local clone you already have, or start a
-   fresh repo — and saves the resolved path to `~/.claude/kb-config.json`. It
-   confirms before any clone/init.
+```
+ln -s "$PWD" ~/.claude/skills/kb
+```
 
-`data_dir` comes only from `~/.claude/kb-config.json` (key `data_dir`). You can
-pre-write it yourself instead of running init: `{ "data_dir": "/path/to/kb-data" }`.
-The other verbs never set it up — if it's missing, they stop and point you at
-`/kb init`.
+Then `/kb init` — it asks for the `kb-data` repo (clone URL, existing local
+clone, or new), builds the keyword index, and you're done. The plugin manifest
+(`.claude-plugin/plugin.json`) makes Claude Code discover the hook on next
+session start without any settings.json edits.
+
+## Layout
+
+```
+.claude-plugin/plugin.json   plugin manifest (hook auto-discovery)
+hooks/hooks.json             UserPromptSubmit → kb-trigger.js
+SKILL.md                     /kb skill (init / add / search / edit)
+spec/entry-format.md         entry schema (types, rels, frontmatter)
+scripts/
+  kb-trigger.js              hook: tokenize prompt, check index, inject context
+  kb-build-index.js          rebuild keyword→id map from entry frontmatter
+  kb-search.js               lexical search, ranked by field weight
+  kb-save.js                 validate + write + commit + push + rebuild index
+```
 
 ## Usage
 
-| Command                                 | What it does                                                                                                                 |
-| --------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
-| `/kb init`                              | One-time setup: point the KB at its `kb-data` repo (clone URL, existing local clone, or new repo) and write the config.       |
-| `/kb add <knowledge>`                   | Draft an entry from freeform text (or a file/URL), save + commit + push.                                                     |
-| `/kb search <query>`                    | Lexical search with query expansion; returns ranked results with full bodies. Use `--type bookmark` to filter.               |
-| `/kb edit <id or description> <change>` | Modify an existing entry in place (factual corrections). For replaced decisions, use `add` with a `supersedes` link instead. |
+| Command | Effect |
+|---|---|
+| `/kb init` | One-time setup: wire data repo, build index |
+| `/kb add <knowledge>` | Draft + save + commit + push an entry |
+| `/kb search <query>` | Ranked search with query expansion |
+| `/kb edit <id or desc> <change>` | Modify an entry in place |
+
+## Tuning the auto-trigger
+
+In `scripts/kb-trigger.js`:
+
+- `THRESHOLD` (default 2) — distinct keyword hits required to fire
+- `MAX_CONTEXT_ENTRIES` (default 5) — entries injected per match
+- `SKIP_PATTERNS` — regex array of prompts that never trigger
+
+## Trade-offs
+
+- vs. **vector/embedding RAG**: no model dependency, no reindex on model change,
+  no binary artifacts. Recall depends on tags + LLM expansion rather than learned
+  similarity. At personal scale (<5000 entries) brute lexical search is faster
+  than an embedding lookup.
+- vs. **DB-backed MCP servers**: no daemon, no binary store, no schema
+  migrations. Data is fully portable markdown. Gives up hybrid BM25+vector
+  scoring and multi-hop retrieval loops.
+- vs. **graph databases**: no infra, no query language. Edges are explicit and
+  reviewable in diffs. Traversal is shallow (1-hop at search).
