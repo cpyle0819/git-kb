@@ -1,12 +1,14 @@
 {
-  "UserPromptSubmit": [
-    {
-      "hooks": [
-        {
-          "type": "command",
-          "command": "node ${CLAUDE_PLUGIN_ROOT}/scripts/kb-trigger.js"
-        }
-      ]
-    }
-  ]
+  "hooks": {
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node ${CLAUDE_PLUGIN_ROOT}/scripts/kb-trigger.js"
+          }
+        ]
+      }
+    ]
+  }
 }
