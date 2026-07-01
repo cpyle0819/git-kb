@@ -36,13 +36,17 @@ session start without any settings.json edits.
 ```
 .claude-plugin/plugin.json   plugin manifest (hook auto-discovery)
 hooks/hooks.json             UserPromptSubmit → kb-trigger.js
-SKILL.md                     /kb skill (init / add / search / edit)
+SKILL.md                     /kb skill: dispatch + inline search + rules
+references/
+  writing.md                 add + edit detail (loaded on those verbs)
+  init.md                     setup detail (loaded on init)
 spec/entry-format.md         entry schema (types, rels, frontmatter)
 scripts/
   kb-trigger.js              hook: tokenize prompt, check index, inject context
   kb-build-index.js          rebuild keyword→id map from entry frontmatter
   kb-search.js               lexical search, ranked by field weight
   kb-save.js                 validate + write + commit + push + rebuild index
+  shared.js                  getConfigPath() — shared config resolution
 ```
 
 ## Usage
