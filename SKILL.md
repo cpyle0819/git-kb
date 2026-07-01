@@ -17,12 +17,14 @@ git is the persistence layer and the markdown files are the source of truth.
 
 1. **Automatic retrieval (the hook).** `scripts/kb-trigger.js` runs on every
    `UserPromptSubmit` (wired via `hooks/hooks.json`). It tokenizes the prompt,
-   checks it against `kb-index.json`, and — if ≥2 distinct keywords hit — injects
-   the matching entries as `additionalContext`. **This is automatic; you never
-   invoke it.** No match (or a skip-pattern prompt like `git …`) → it emits
-   nothing and the prompt passes through untouched. This is the mechanism behind
-   "automatic knowledge-base retrieval for every prompt." Tuning notes live in
-   the README.
+   checks it against `kb-index.json`, and — if ≥2 distinct keywords hit
+   (`THRESHOLD`, default 2) — injects the matching entries as `additionalContext`.
+   **This is automatic; you never invoke it.** Fewer than 2 keyword hits, or a
+   prompt matching `SKIP_PATTERNS` (mechanical prompts like `git …` and slash
+   commands) → it emits nothing and the prompt passes through untouched. This is
+   the mechanism behind "automatic knowledge-base retrieval for every prompt."
+   The exact defaults and the full skip-pattern list are in the README's
+   **"Tuning the auto-trigger"** section.
 2. **The `/kb` verbs (below).** Explicit `init` / `add` / `search` / `edit`.
 
 ## Dispatch first — do only what the verb needs
@@ -48,6 +50,12 @@ user the valid verbs and stop (no natural-language fallback in v1).
 `kb.json` manifest, and the generated `kb-index.json` search index), read from
 **`${CLAUDE_PLUGIN_DATA}/kb-config.json`** (key `data_dir`; resolve `~`). It is
 set up only by `init`.
+
+`CLAUDE_PLUGIN_DATA` is the harness-provided plugin data directory; the helpers
+read it from the environment. When it is unset (e.g. running a script by hand),
+they fall back to `~/.claude/kb-config.json`. You never set this variable
+yourself — the helpers resolve the config path on their own, which is why
+`search`/`add`/`edit` need no config read before invoking them.
 
 **Not configured yet?** `search`/`add`/`edit` each run a helper that resolves
 `data_dir` itself. If a helper exits with a `data_dir` `ERROR:` (config missing,
@@ -77,7 +85,9 @@ pull, no file reads. The helper does all of that. Two steps only:
    grep), scores matches (title > tag > url > body), and prints ranked results.
    The top hits include their **full body**, and `links:` are resolved to target
    titles — so you have everything to answer AND to offer related entries in one
-   call. Special outputs: `NO_MATCHES` (nothing matched) or a line starting
+   call. An entry with no outgoing links has **no `links:` line at all** (the
+   field is omitted, not printed empty) — a missing `links:` line means the entry
+   genuinely has none, not that the field was dropped. Special outputs: `NO_MATCHES` (nothing matched) or a line starting
    `ERROR:` — a `data_dir` `ERROR:` means setup is incomplete; stop and point
    the user to `/kb init`.
 2. Answer the user's question directly from the returned content (the top hits'
