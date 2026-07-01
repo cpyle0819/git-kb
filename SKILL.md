@@ -44,9 +44,10 @@ user the valid verbs and stop (no natural-language fallback in v1).
   write `${CLAUDE_PLUGIN_DATA}/kb-config.json`. Read
   [`references/init.md`](references/init.md).
 
-`data_dir` is the local clone of the **kb-data** repo (holds `entries/` and
-`kb.json`), read from **`${CLAUDE_PLUGIN_DATA}/kb-config.json`** (key `data_dir`;
-resolve `~`). It is set up only by `init`.
+`data_dir` is the local clone of the **kb-data** repo (holds `entries/`, the
+`kb.json` manifest, and the generated `kb-index.json` search index), read from
+**`${CLAUDE_PLUGIN_DATA}/kb-config.json`** (key `data_dir`; resolve `~`). It is
+set up only by `init`.
 
 **Not configured yet?** `search`/`add`/`edit` each run a helper that resolves
 `data_dir` itself. If a helper exits with a `data_dir` `ERROR:` (config missing,

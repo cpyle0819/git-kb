@@ -45,9 +45,11 @@ thesis, separate entries for distinct findings, joined with `part_of` /
      `lesson_learned` for a debugging insight/gotcha; `pattern_convention` for a
      reusable rule; otherwise `factual_reference`.
    - `url` (frontmatter field) — required for `bookmark`, optional for others.
-   - `title` + a concise markdown body (for bookmarks: body is optional
-     notes/context about _why_ you saved it).
-   - `tags` (free-form).
+   - `title` + a concise markdown body. For bookmarks the body is optional:
+     use whatever the user gives about the link (a why-saved rationale OR a
+     plain description like "our on-call runbook") as the body; omit it only if
+     they gave nothing but the URL.
+   - `tags` (free-form; YAML flow list, e.g. `[api, rate-limit]`).
    - `links` — closed `rel` set only; `to:` only ids confirmed in step 1.
      **`rel` guidance:** `supersedes` ONLY when `to:` is the specific entry being
      replaced (if the replaced thing has no entry, use `relates_to`); `part_of`
@@ -61,9 +63,33 @@ thesis, separate entries for distinct findings, joined with `part_of` /
      for when no directional rel fits _either way_ (peer ties, person↔team
      leadership). Torn between two rels in the SAME direction → prefer the weaker.
    - `created`/`updated` = today, as `YYYY-MM-DD`.
+
+   **Canonical entry shape** (frontmatter is a YAML block between `---` fences;
+   everything after the closing fence is the markdown body):
+
+   ```markdown
+   ---
+   id: __ID__
+   title: Adopt PostgreSQL for the analytics pipeline
+   type: decision
+   url:                       # required for bookmark, omit otherwise
+   tags: [database, analytics, postgres]
+   links:
+     - rel: relates_to
+       to: kb-0002
+   created: 2026-07-01
+   updated: 2026-07-01
+   ---
+
+   We chose PostgreSQL over a separate OLAP store: window functions and JSONB
+   cover our analytics needs without a second system to operate.
+   ```
+
 3. **Save immediately** — pipe the entry to the helper via heredoc redirect
    (IMPORTANT: start the command with `node`, not `cat | node`):
    `node ${CLAUDE_SKILL_DIR}/scripts/kb-save.js --slug "<slug-from-title>" <<'EOF'`
+   (slug format: lowercase, words hyphen-separated, no punctuation — e.g. title
+   "API rate limit" → `api-rate-limit`. The helper prefixes the `kb-NNNN` id.)
    It resolves `data_dir`, pulls (if upstream), assigns a collision-free id,
    validates (closed enums, no dangling links), writes the file, bumps
    `kb.json`, commits, and pushes. It prints `SAVED kb-NNNN ...` with a `push:`

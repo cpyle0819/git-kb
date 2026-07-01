@@ -30,8 +30,8 @@ const PER_TEST_RESULT = {
   type: 'object',
   properties: {
     testId: { type: 'string' },
-    scriptOutput: { type: 'string', description: 'The relevant output the script(s) printed (SAVED/EDITED/push line/search results/trigger stdout/etc.)' },
-    claimedOutcome: { type: 'string', description: 'What the agent believes happened for this test' },
+    scriptOutput: { type: 'string', description: 'ONLY the single decisive line the script printed (the SAVED/EDITED/push line, the top search hit id, or the trigger verdict). Not full output.' },
+    claimedOutcome: { type: 'string', description: 'What happened for this test, in one sentence.' },
   },
   required: ['testId', 'scriptOutput', 'claimedOutcome'],
 }
@@ -59,8 +59,8 @@ const VERIFY_SCHEMA = {
         properties: {
           testId: { type: 'string' },
           pass: { type: 'boolean' },
-          evidence: { type: 'string', description: 'What was actually observed in the scratch repo (git log line, file contents, search/trigger output) that proves pass/fail' },
-          reason: { type: 'string', description: 'If failed, the concrete discrepancy between expected and actual. Empty if passed.' },
+          evidence: { type: 'string', description: 'One line of concrete proof from the repo (the git log line, the changed field, or the trigger verdict). Keep it to a sentence.' },
+          reason: { type: 'string', description: 'If failed, the one-line discrepancy. Empty if passed.' },
         },
         required: ['testId', 'pass', 'evidence', 'reason'],
       },
@@ -113,6 +113,19 @@ const READ_TESTS = [
     task: 'Test the auto-trigger hook with a prompt that should NOT trigger. Feed kb-trigger.js this prompt via stdin JSON: {"prompt":"git status"} and report what it emits.',
     expect: 'kb-trigger.js emits NOTHING on stdout (exits 0, no context injected) — "git status" matches a skip pattern and is below the keyword threshold.',
   },
+  {
+    id: 'cache-dedup',
+    task: `Verify the auto-trigger hook's per-session caching: it must NOT re-inject entries already injected earlier in the same session, but MUST resurface them if the KB changes. Run this exact sequence in ONE shell:
+  1. Pick a session id unique to this run: SID="kbtest-$(date +%s)-$$"
+  2. Define a fire helper (substitute the real cfg + scripts paths for this harness):
+       fire() { echo '{"session_id":"'"$SID"'","prompt":"How should we scale the analytics database on postgres?"}' | CLAUDE_PLUGIN_DATA=<cfgDir> node <scriptsDir>/kb-trigger.js; echo "---END---"; }
+  3. FIRE #1: run fire
+  4. FIRE #2: run fire again (SAME session id, SAME prompt)
+  5. Simulate an add/edit by bumping the index mtime: touch <dataDir>/kb-index.json
+  6. FIRE #3: run fire again
+  Report the stdout of all three fires (delimited by ---END---).`,
+    expect: 'Fire #1 emits JSON with hookSpecificOutput.additionalContext (the seeded postgres entry kb-0001). Fire #2 emits NOTHING between its delimiters — those entries were already injected this session (dedup by entry id via the per-session ledger). Fire #3 emits JSON again — touching kb-index.json changed its mtime, invalidating the session ledger so previously-seen entries resurface.',
+  },
 ]
 
 // ─── Prompt builders ─────────────────────────────────────────────────────────
@@ -146,6 +159,11 @@ Report honestly, including every point where the docs were unclear, sent you to 
 wrong place, or made you guess. That friction is the primary output of this test.
 Collect friction across all tasks into the single \`friction\` list; prefix each note
 with the testId it relates to (or "general").
+
+EFFICIENCY: You are a test harness, not a writer. Do the minimum tool calls each task
+needs and stop. Do NOT narrate your reasoning, summarize what you are about to do, or
+recap what you did — the structured fields ARE your entire report. No preamble, no
+running commentary between tool calls. Keep every friction note to one sentence.
 `.trim()
 
 const taskBlock = (tests) =>
@@ -187,18 +205,27 @@ Seeded entries: ${env.seededIds.join(', ')}
 - cat any entry file that a test touched
 - CLAUDE_PLUGIN_DATA=${env.cfgDir} node ${env.scriptsDir}/kb-search.js "<term>"   (for the search tests)
 - echo '<the json>' | CLAUDE_PLUGIN_DATA=${env.cfgDir} node ${env.scriptsDir}/kb-trigger.js   (for the trigger tests)
+- For cache-dedup: do NOT trust the agent's pasted output. Re-run the 3-fire sequence
+  yourself with a FRESH session id (e.g. SID="verify-$(date +%s)-$$"): fire once, fire
+  again with the same id+prompt, then \`touch ${env.dataDir}/kb-index.json\`, then fire a
+  third time. Confirm fire #1 emits additionalContext, fire #2 emits nothing, fire #3
+  emits additionalContext again.
 
 ## Tests to verify (with each test's expected outcome and what the agent claimed):
 ${tests.map((t) => {
   const c = claims[t.id]
   return `### ${t.id}
 Expected: ${t.expect}
-Agent claimed: ${c ? JSON.stringify(c) : '(no claim returned — treat as fail unless the repo state proves it happened anyway)'}`
+Agent claimed: ${c ? c.claimedOutcome : '(no claim returned — treat as fail unless the repo state proves it happened anyway)'}`
 }).join('\n\n')}
 
 Return one verdict per testId. Decide pass/fail based on what the repo ACTUALLY
 contains, not what was claimed. Cite concrete evidence (the git log line, file
-contents, exact script output) in each verdict.`
+contents, exact script output) in each verdict.
+
+EFFICIENCY: Run the checks, fill the verdicts, stop. Do NOT narrate your inspection
+or explain your reasoning outside the structured fields. One line of evidence per
+verdict — the decisive fact, not a transcript.`
 
 // ─── Orchestration ───────────────────────────────────────────────────────────
 
@@ -256,7 +283,7 @@ Return the absolute paths (skillDir, scriptsDir, dataDir, cfgDir), the seeded id
 [kb-0001, kb-0002, kb-0003], ok=true if all steps succeeded, and notes on anything
 that failed or surprised you.`
 
-const env = await agent(setupPrompt, { label: 'setup:scratch-kb', phase: 'Setup', schema: SETUP_SCHEMA })
+const env = await agent(setupPrompt, { label: 'setup:scratch-kb', phase: 'Setup', schema: SETUP_SCHEMA, model: 'sonnet', effort: 'low' })
 
 if (!env || !env.ok) {
   log('Setup failed — aborting before any tests ran.')
@@ -277,8 +304,8 @@ try {
   log('One fresh writer (3 tasks, serial) + one fresh reader (4 tasks) — each reads the docs once...')
 
   const [writer, reader] = await parallel([
-    () => agent(writerPrompt(env), { label: 'exercise:writer', phase: 'Exercise', schema: EXERCISE_SCHEMA }),
-    () => agent(readerPrompt(env), { label: 'exercise:reader', phase: 'Exercise', schema: EXERCISE_SCHEMA }),
+    () => agent(writerPrompt(env), { label: 'exercise:writer', phase: 'Exercise', schema: EXERCISE_SCHEMA, model: 'sonnet', effort: 'low' }),
+    () => agent(readerPrompt(env), { label: 'exercise:reader', phase: 'Exercise', schema: EXERCISE_SCHEMA, model: 'sonnet', effort: 'low' }),
   ])
 
   const exerciseResults = [
@@ -297,7 +324,7 @@ try {
   log('Adversarially verifying every outcome against the final scratch-repo state...')
 
   const allTests = [...WRITE_TESTS, ...READ_TESTS]
-  const verify = await agent(verifyPrompt(env, allTests, claims), { label: 'verify:all', phase: 'Verify', schema: VERIFY_SCHEMA })
+  const verify = await agent(verifyPrompt(env, allTests, claims), { label: 'verify:all', phase: 'Verify', schema: VERIFY_SCHEMA, model: 'sonnet' })
 
   const verdicts = verify ? verify.verdicts : []
   const passed = verdicts.filter((v) => v.pass)
@@ -322,7 +349,7 @@ try {
        rm -rf ${env.dataDir} ${env.cfgDir}
      Then verify neither path exists anymore (ls should fail for both). Return a one-line
      confirmation. Do NOT touch any other path.`,
-    { label: 'teardown:cleanup', phase: 'Teardown' },
+    { label: 'teardown:cleanup', phase: 'Teardown', model: 'sonnet', effort: 'low' },
   )
 }
 
