@@ -69,15 +69,19 @@ workflows/
    `mktemp`) with a temp `CLAUDE_PLUGIN_DATA` config and three seeded entries.
    Your real KB and its remote are never touched; the scratch repo has no
    remote, so pushes resolve harmlessly to `NO_REMOTE`.
-2. **Exercise** — spawns fresh agents that learn the skill only from its docs
-   and perform user tasks: add a decision, add a bookmark, edit an entry
-   (serially, since they share one git repo), then search by keyword, search
-   with `--type`, and fire the auto-trigger hook with a matching and a
-   non-matching prompt (in parallel).
-3. **Verify** — separate adversarial agents inspect the scratch repo's git log
-   and entry files directly to confirm each outcome, rather than trusting the
-   test agents' self-reports.
+2. **Exercise** — two fresh agents that learn the skill only from its docs (read
+   once, reused across tasks). A **writer** does the three mutating tasks in
+   order (add a decision, add a bookmark, edit an entry — serial, since they
+   share one git repo); a **reader** runs concurrently doing the four read-only
+   tasks (search by keyword, search with `--type`, and firing the auto-trigger
+   hook with a matching and a non-matching prompt).
+3. **Verify** — one adversarial agent inspects the final scratch-repo state
+   (git log, entry files, re-run search/trigger) to confirm every outcome,
+   rather than trusting the test agents' self-reports.
 4. **Teardown** — removes the scratch dirs (runs even if a test throws).
+
+Five agents total (setup + writer + reader + verify + teardown), keeping
+per-test pass/fail granularity while avoiding redundant doc-reads.
 
 The report gives pass/fail per test plus **doc-followability friction** — every
 point where a fresh agent found the docs ambiguous or had to guess. That

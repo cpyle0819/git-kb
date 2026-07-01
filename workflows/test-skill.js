@@ -3,8 +3,8 @@ export const meta = {
   description: 'Fresh-eyes test of the /kb skill. Spins up isolated scratch KB, has fresh agents exercise init/add/edit/search + the auto-trigger hook the way a user would, adversarially verifies the outcomes against the scratch repo, and reports pass/fail plus doc-followability friction. Safe: never touches the real KB or its remote.',
   phases: [
     { title: 'Setup', detail: 'mktemp an isolated scratch KB + config, seed known entries, build index' },
-    { title: 'Exercise', detail: 'Fresh-eyes agents perform user tasks by following the skill docs' },
-    { title: 'Verify', detail: 'Adversarially confirm each outcome in the scratch repo' },
+    { title: 'Exercise', detail: 'One fresh writer + one fresh reader perform user tasks by following the skill docs' },
+    { title: 'Verify', detail: 'One adversarial pass confirms every outcome against the scratch repo' },
     { title: 'Teardown', detail: 'Remove all scratch dirs' },
   ],
 }
@@ -25,33 +25,54 @@ const SETUP_SCHEMA = {
   required: ['ok', 'skillDir', 'scriptsDir', 'dataDir', 'cfgDir', 'seededIds', 'notes'],
 }
 
-const TEST_RESULT_SCHEMA = {
+// One agent runs several tests; it returns one entry per test id.
+const PER_TEST_RESULT = {
   type: 'object',
   properties: {
     testId: { type: 'string' },
-    commandsRun: { type: 'array', items: { type: 'string' }, description: 'The exact shell commands run, in order' },
-    scriptOutput: { type: 'string', description: 'The relevant output the script(s) printed (SAVED/EDITED/push line/search results/etc.)' },
-    claimedOutcome: { type: 'string', description: 'What the agent believes happened' },
-    friction: { type: 'array', items: { type: 'string' }, description: 'Fresh-eyes friction: anything ambiguous, missing, or that forced a guess while following the docs' },
+    scriptOutput: { type: 'string', description: 'The relevant output the script(s) printed (SAVED/EDITED/push line/search results/trigger stdout/etc.)' },
+    claimedOutcome: { type: 'string', description: 'What the agent believes happened for this test' },
   },
-  required: ['testId', 'commandsRun', 'scriptOutput', 'claimedOutcome', 'friction'],
+  required: ['testId', 'scriptOutput', 'claimedOutcome'],
 }
 
-const VERDICT_SCHEMA = {
+const EXERCISE_SCHEMA = {
   type: 'object',
   properties: {
-    testId: { type: 'string' },
-    pass: { type: 'boolean' },
-    evidence: { type: 'string', description: 'What was actually observed in the scratch repo (git log line, file contents, search output) that proves pass/fail' },
-    reason: { type: 'string', description: 'If failed, the concrete discrepancy between expected and actual' },
+    results: { type: 'array', items: PER_TEST_RESULT },
+    friction: {
+      type: 'array',
+      items: { type: 'string' },
+      description: 'Fresh-eyes friction across ALL tasks: anything ambiguous, missing, or that forced a guess while following the docs. Prefix each note with the testId it relates to (or "general").',
+    },
   },
-  required: ['testId', 'pass', 'evidence', 'reason'],
+  required: ['results', 'friction'],
+}
+
+const VERIFY_SCHEMA = {
+  type: 'object',
+  properties: {
+    verdicts: {
+      type: 'array',
+      items: {
+        type: 'object',
+        properties: {
+          testId: { type: 'string' },
+          pass: { type: 'boolean' },
+          evidence: { type: 'string', description: 'What was actually observed in the scratch repo (git log line, file contents, search/trigger output) that proves pass/fail' },
+          reason: { type: 'string', description: 'If failed, the concrete discrepancy between expected and actual. Empty if passed.' },
+        },
+        required: ['testId', 'pass', 'evidence', 'reason'],
+      },
+    },
+  },
+  required: ['verdicts'],
 }
 
 // ─── Test definitions ────────────────────────────────────────────────────────
 
-// Mutating tests run SERIALLY — they all commit to one git repo and concurrent
-// kb-save.js runs would collide on .git/index.lock and the pull/commit cycle.
+// Mutating tests — one writer agent runs them IN ORDER. They share one git repo,
+// so they must be sequential (concurrent kb-save.js would collide on index.lock).
 const WRITE_TESTS = [
   {
     id: 'add-decision',
@@ -66,21 +87,21 @@ const WRITE_TESTS = [
   {
     id: 'edit-factual',
     task: 'The seeded entry about the API rate limit is out of date. Update it: the rate limit is now 200 requests per minute (was 100).',
-    expect: 'The existing rate-limit entry is edited in place (same id, no new id assigned), its body now says 200, `updated:` is bumped, and git log shows an `edit kb-NNNN: ...` commit. The script printed EDITED.',
+    expect: 'The existing rate-limit entry (kb-0003) is edited in place (same id, no new id assigned), its body now says 200, `updated:` is bumped, and git log shows an `edit kb-NNNN: ...` commit. The script printed EDITED.',
   },
 ]
 
-// Read-only tests run in PARALLEL — safe against the shared repo.
+// Read-only tests — one reader agent runs all of them. Safe against the repo.
 const READ_TESTS = [
   {
     id: 'search-keyword',
     task: 'The user asks: "what did we decide about the analytics database?" Search the KB for relevant entries and answer.',
-    expect: 'kb-search.js returns the seeded PostgreSQL/analytics decision entry as a top hit (matched on title/tags). The agent answers from the returned body without re-reading files.',
+    expect: 'kb-search.js returns the seeded PostgreSQL/analytics decision entry (kb-0001) as a top hit (matched on title/tags). The agent answers from the returned body without re-reading files.',
   },
   {
     id: 'search-type-filter',
     task: 'The user asks: "list all my bookmarks." Use the skill to list only bookmark-type entries.',
-    expect: 'The agent runs kb-search.js with `--type bookmark "*"` and gets back only bookmark entries (the seeded deploy-dashboard bookmark, plus any added during this test run). No non-bookmark entries appear.',
+    expect: 'The agent runs kb-search.js with `--type bookmark "*"` and gets back only bookmark entries (at minimum the seeded deploy-dashboard bookmark kb-0002). No non-bookmark entries appear.',
   },
   {
     id: 'trigger-positive',
@@ -98,7 +119,7 @@ const READ_TESTS = [
 
 const harnessPreamble = (env) => `
 You are a FRESH user of the \`/kb\` skill — you have no memory of how it was built.
-Learn it only from its docs, then use it to accomplish a task.
+Learn it only from its docs, then use it to accomplish the tasks below.
 
 Test-harness environment (this is NOT the real KB — it is a disposable scratch copy):
 - Skill root:  ${env.skillDir}
@@ -108,9 +129,10 @@ Test-harness environment (this is NOT the real KB — it is a disposable scratch
 - Seeded entries already present: ${env.seededIds.join(', ')}
 
 How to run the skill in this harness:
-1. Read ${env.skillDir}/SKILL.md first. Follow whatever it says. If it points you to a
-   file under references/, read that too — that is part of the test (does the doc
-   send you to the right place?).
+1. Read ${env.skillDir}/SKILL.md ONCE up front. Follow whatever it says. If it points
+   you to a file under references/, read that too — that is part of the test (does the
+   doc send you to the right place?). Read the docs once, then reuse that knowledge
+   across all your tasks; do not re-read on every task.
 2. The docs reference \`\${CLAUDE_SKILL_DIR}/scripts\`. In this harness, substitute the
    literal path ${env.scriptsDir} for that.
 3. The skill resolves its data repo from CLAUDE_PLUGIN_DATA. So prefix EVERY command
@@ -122,52 +144,61 @@ How to run the skill in this harness:
 
 Report honestly, including every point where the docs were unclear, sent you to the
 wrong place, or made you guess. That friction is the primary output of this test.
+Collect friction across all tasks into the single \`friction\` list; prefix each note
+with the testId it relates to (or "general").
 `.trim()
 
-const writePrompt = (t, env) => `${harnessPreamble(env)}
+const taskBlock = (tests) =>
+  tests.map((t, i) => `${i + 1}. [${t.id}] ${t.task}`).join('\n\n')
 
-## Your task
-${t.task}
+const writerPrompt = (env) => `${harnessPreamble(env)}
 
-Follow the skill's documented flow for this kind of task end to end (draft the entry
-per the spec, run the save helper, interpret its output). Then return the structured
-result: the exact commands you ran, the script's output, what you believe happened,
-and any friction.`
+## Your tasks (do them IN THIS ORDER — they share one git repo, so never run two
+## save operations at once)
+${taskBlock(WRITE_TESTS)}
 
-const readPrompt = (t, env) => `${harnessPreamble(env)}
+For each task, follow the skill's documented write flow end to end (draft the entry
+per the spec, run the save helper, interpret its output). Return one \`results\` entry
+per task (testId, the script output you saw, and what you believe happened), plus the
+combined \`friction\` list.`
 
-## Your task
-${t.task}
+const readerPrompt = (env) => `${harnessPreamble(env)}
 
-Follow the skill's documented flow. Return the structured result: exact commands,
-script output, what you believe happened, and any friction.`
+## Your tasks (independent; order doesn't matter)
+${taskBlock(READ_TESTS)}
 
-const verifyPrompt = (x, env) => `
-You are an adversarial verifier. Do NOT trust the test agent's self-report — confirm
-the truth by inspecting the scratch KB directly.
+For each task, follow the skill's documented flow. Return one \`results\` entry per
+task (testId, the script output you saw, and what you believe happened), plus the
+combined \`friction\` list.`
+
+const verifyPrompt = (env, tests, claims) => `
+You are an adversarial verifier. Do NOT trust the test agents' self-reports — confirm
+the truth by inspecting the scratch KB directly. You verify ALL tests in one pass by
+examining the final state of the repo.
 
 Scratch data repo: ${env.dataDir}  (git repo; entries in entries/, manifest kb.json, index kb-index.json)
 Scripts dir: ${env.scriptsDir}
 Scratch config: ${env.cfgDir}  (set CLAUDE_PLUGIN_DATA=${env.cfgDir} to run any kb script)
 Seeded entries: ${env.seededIds.join(', ')}
 
-## Test under verification: ${x.t.id}
-Expected outcome:
-${x.t.expect}
-
-The test agent claimed:
-${x.r ? JSON.stringify({ claimedOutcome: x.r.claimedOutcome, scriptOutput: x.r.scriptOutput }, null, 2) : '(the test agent produced no result — treat as fail unless the repo state proves the outcome happened anyway)'}
-
-## How to verify
-Inspect the actual state. Useful commands (all read-only):
+## Start by capturing the final state once, then reason about each test against it:
 - git -C ${env.dataDir} log --oneline
-- git -C ${env.dataDir} show --stat HEAD
-- ls ${env.dataDir}/entries/ ; cat the relevant entry file
-- CLAUDE_PLUGIN_DATA=${env.cfgDir} node ${env.scriptsDir}/kb-search.js "<term>"
-- for the trigger tests, re-run: echo '<the json>' | CLAUDE_PLUGIN_DATA=${env.cfgDir} node ${env.scriptsDir}/kb-trigger.js
+- ls ${env.dataDir}/entries/
+- cat any entry file that a test touched
+- CLAUDE_PLUGIN_DATA=${env.cfgDir} node ${env.scriptsDir}/kb-search.js "<term>"   (for the search tests)
+- echo '<the json>' | CLAUDE_PLUGIN_DATA=${env.cfgDir} node ${env.scriptsDir}/kb-trigger.js   (for the trigger tests)
 
-Decide pass/fail based on what the repo ACTUALLY contains, not what was claimed. Cite
-the concrete evidence (the git log line, the file contents, the exact script output).`
+## Tests to verify (with each test's expected outcome and what the agent claimed):
+${tests.map((t) => {
+  const c = claims[t.id]
+  return `### ${t.id}
+Expected: ${t.expect}
+Agent claimed: ${c ? JSON.stringify(c) : '(no claim returned — treat as fail unless the repo state proves it happened anyway)'}`
+}).join('\n\n')}
+
+Return one verdict per testId. Decide pass/fail based on what the repo ACTUALLY
+contains, not what was claimed. Cite concrete evidence (the git log line, file
+contents, exact script output) in each verdict.`
 
 // ─── Orchestration ───────────────────────────────────────────────────────────
 
@@ -240,45 +271,46 @@ log(`Scratch KB at ${env.dataDir} (seeded ${env.seededIds.join(', ')}). Config a
 let report
 try {
   // ── Exercise ──────────────────────────────────────────────────────────────
+  // Two fresh agents. Writer runs first and completes all mutations (serial,
+  // shared repo); reader runs concurrently since reads don't touch the repo.
   phase('Exercise')
-  log('Running mutating tests serially (shared git repo), then read tests in parallel...')
+  log('One fresh writer (3 tasks, serial) + one fresh reader (4 tasks) — each reads the docs once...')
 
-  const writeResults = []
-  for (const t of WRITE_TESTS) {
-    const r = await agent(writePrompt(t, env), { label: `exercise:${t.id}`, phase: 'Exercise', schema: TEST_RESULT_SCHEMA })
-    writeResults.push({ t, r })
-  }
+  const [writer, reader] = await parallel([
+    () => agent(writerPrompt(env), { label: 'exercise:writer', phase: 'Exercise', schema: EXERCISE_SCHEMA }),
+    () => agent(readerPrompt(env), { label: 'exercise:reader', phase: 'Exercise', schema: EXERCISE_SCHEMA }),
+  ])
 
-  const readResults = (await parallel(
-    READ_TESTS.map((t) => () =>
-      agent(readPrompt(t, env), { label: `exercise:${t.id}`, phase: 'Exercise', schema: TEST_RESULT_SCHEMA })
-        .then((r) => ({ t, r })),
-    ),
-  )).filter(Boolean)
-
-  const allTests = [...writeResults, ...readResults]
+  const exerciseResults = [
+    ...(writer ? writer.results : []),
+    ...(reader ? reader.results : []),
+  ]
+  const friction = [
+    ...(writer ? writer.friction : []),
+    ...(reader ? reader.friction : []),
+  ]
+  const claims = Object.fromEntries(exerciseResults.map((r) => [r.testId, r]))
 
   // ── Verify ────────────────────────────────────────────────────────────────
+  // One adversarial pass over the final repo state covers all tests.
   phase('Verify')
-  log(`Adversarially verifying ${allTests.length} test outcomes against the scratch repo...`)
+  log('Adversarially verifying every outcome against the final scratch-repo state...')
 
-  const verdicts = (await parallel(
-    allTests.map((x) => () =>
-      agent(verifyPrompt(x, env), { label: `verify:${x.t.id}`, phase: 'Verify', schema: VERDICT_SCHEMA })
-        .then((v) => ({ testId: x.t.id, verdict: v, friction: x.r ? x.r.friction : [] })),
-    ),
-  )).filter(Boolean)
+  const allTests = [...WRITE_TESTS, ...READ_TESTS]
+  const verify = await agent(verifyPrompt(env, allTests, claims), { label: 'verify:all', phase: 'Verify', schema: VERIFY_SCHEMA })
 
-  const passed = verdicts.filter((v) => v.verdict && v.verdict.pass)
-  const failed = verdicts.filter((v) => !v.verdict || !v.verdict.pass)
-  const allFriction = verdicts.flatMap((v) => (v.friction || []).map((f) => ({ testId: v.testId, note: f })))
+  const verdicts = verify ? verify.verdicts : []
+  const passed = verdicts.filter((v) => v.pass)
+  const failed = verdicts.filter((v) => !v.pass)
+  const unverified = allTests.filter((t) => !verdicts.some((v) => v.testId === t.id)).map((t) => t.id)
 
   report = {
-    status: failed.length === 0 ? 'all_passed' : 'failures',
-    summary: `${passed.length}/${verdicts.length} tests passed.`,
+    status: verdicts.length === 0 ? 'verify_failed' : failed.length === 0 && unverified.length === 0 ? 'all_passed' : 'failures',
+    summary: `${passed.length}/${allTests.length} tests passed${unverified.length ? `, ${unverified.length} unverified` : ''}.`,
     passed: passed.map((v) => v.testId),
-    failed: failed.map((v) => ({ testId: v.testId, reason: v.verdict ? v.verdict.reason : 'no verdict returned', evidence: v.verdict ? v.verdict.evidence : '' })),
-    friction: allFriction,
+    failed: failed.map((v) => ({ testId: v.testId, reason: v.reason, evidence: v.evidence })),
+    unverified,
+    friction,
     verdicts,
   }
 } finally {
