@@ -59,11 +59,11 @@ workflows/
 | `/kb add <knowledge>` | Draft + save + commit + push an entry |
 | `/kb search <query>` | Ranked search with query expansion |
 | `/kb edit <id or desc> <change>` | Modify an entry in place |
-| `/test-skill` | Fresh-eyes test of the skill (see below) |
+| `/kb:test-skill` | Fresh-eyes test of the skill (see below) |
 
 ## Testing the skill
 
-`/test-skill` runs an isolated, self-verifying test of the whole skill. It:
+`/kb:test-skill` runs an isolated, self-verifying test of the whole skill. It:
 
 1. **Setup** — creates a throwaway scratch kb-data repo in a temp dir (via
    `mktemp`) with a temp `CLAUDE_PLUGIN_DATA` config and three seeded entries.
