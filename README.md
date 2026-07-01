@@ -72,9 +72,10 @@ workflows/
 2. **Exercise** — two fresh agents that learn the skill only from its docs (read
    once, reused across tasks). A **writer** does the three mutating tasks in
    order (add a decision, add a bookmark, edit an entry — serial, since they
-   share one git repo); a **reader** runs concurrently doing the four read-only
-   tasks (search by keyword, search with `--type`, and firing the auto-trigger
-   hook with a matching and a non-matching prompt).
+   share one git repo); a **reader** runs concurrently doing the five read-only
+   tasks (search by keyword, search with `--type`, firing the auto-trigger hook
+   with a matching and a non-matching prompt, and verifying per-session
+   injection caching dedups repeats and re-fires after a KB change).
 3. **Verify** — one adversarial agent inspects the final scratch-repo state
    (git log, entry files, re-run search/trigger) to confirm every outcome,
    rather than trusting the test agents' self-reports.

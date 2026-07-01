@@ -165,31 +165,51 @@ function search(entries, { rawTerms, typeFilter }) {
 
 // ─── Presentation ────────────────────────────────────────────────────────────
 
-function formatResults(results, titleById) {
+// Render one result to the human-readable text block. Single source of truth so
+// the skill's search output and the hook's injected context never diverge.
+function formatEntry(r, titleById) {
   const lines = [];
-  for (const r of results) {
-    lines.push(`### ${r.id} — ${r.title}`);
-    lines.push(
-      `type: ${r.type}   tags: [${r.tags.join(", ")}]   created: ${r.created}   updated: ${r.updated}   match: ${r.why} (score ${r.score})`,
-    );
-    if (r.url) lines.push(`url: ${r.url}`);
-    lines.push(`file: entries/${r.file}`);
-    if (r.links.length) {
-      const linkStr = r.links
-        .map((id) => (titleById[id] ? `${id} (${titleById[id]})` : id))
-        .join(", ");
-      lines.push(`links: ${linkStr}`);
-    }
-    lines.push("---", r.body, "---");
-    lines.push("");
+  lines.push(`### ${r.id} — ${r.title}`);
+  lines.push(
+    `type: ${r.type}   tags: [${r.tags.join(", ")}]   created: ${r.created}   updated: ${r.updated}   match: ${r.why} (score ${r.score})`,
+  );
+  if (r.url) lines.push(`url: ${r.url}`);
+  lines.push(`file: entries/${r.file}`);
+  if (r.links.length) {
+    const linkStr = r.links
+      .map((id) => (titleById[id] ? `${id} (${titleById[id]})` : id))
+      .join(", ");
+    lines.push(`links: ${linkStr}`);
   }
+  lines.push("---", r.body, "---");
   return lines.join("\n");
+}
+
+function formatResults(results, titleById) {
+  return results.map((r) => formatEntry(r, titleById)).join("\n\n") + "\n";
+}
+
+// One JSON object per line: {id, score, render}. Consumers (the hook) parse
+// line-by-line, filter by id, and reuse `render` verbatim.
+function formatResultsJsonl(results, titleById) {
+  return results
+    .map((r) =>
+      JSON.stringify({
+        id: r.id,
+        score: r.score,
+        render: formatEntry(r, titleById),
+      }),
+    )
+    .join("\n");
 }
 
 // ─── CLI ─────────────────────────────────────────────────────────────────────
 
 const { values, positionals } = parseArgs({
-  options: { type: { type: "string", short: "t" } },
+  options: {
+    type: { type: "string", short: "t" },
+    jsonl: { type: "boolean" },
+  },
   allowPositionals: true,
   strict: false,
 });
@@ -219,4 +239,8 @@ if (result.status === "no_matches") {
   process.exit(0);
 }
 
-process.stdout.write(formatResults(result.results, titleById));
+process.stdout.write(
+  values.jsonl
+    ? formatResultsJsonl(result.results, titleById)
+    : formatResults(result.results, titleById),
+);
