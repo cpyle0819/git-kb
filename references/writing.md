@@ -11,7 +11,7 @@ validation) in one allowlisted call. You draft + review; the helper does the res
 - **Pull failure = hard abort** — if `git pull` fails (network/auth/diverged), kb-save.js exits 6 with `ERROR: git pull failed — refusing to write against a stale DB.` The commit never happens. Fix connectivity before retrying.
 - **Merge conflict after pull** — prints `ERROR: git pull left a merge conflict.` (code 6). Don't retry blindly — the user must resolve it in the data repo first.
 - **Local commit without push** — `push:` line says `committed locally but NOT pushed`. The entry IS saved. Don't re-run kb-save.js (it will find NO_CHANGES and obscure the local-only state). Relay the message and suggest retrying push later.
-- **`NO_REMOTE` ≠ push failure** — means no git remote configured. See [First-time remote setup](#first-time-remote-setup). Never call `--set-remote` unless the push line explicitly said `NO_REMOTE` — if origin already exists it will error.
+- **`NO_REMOTE` ≠ push failure** — means no git remote configured. The save fully succeeded: the entry is written and committed locally, and `NO_REMOTE` is the complete, correct terminal state for a repo with no remote (nothing more to do). Only treat it as actionable on the repo's *first* save, where it's the cue to offer [First-time remote setup](#first-time-remote-setup). Never call `--set-remote` unless the push line explicitly said `NO_REMOTE` — if origin already exists it will error.
 - **`id: __ID__` must be unquoted** — `id: '__ID__'` causes kb-save.js to exit 2: `ERROR: stdin frontmatter must contain id: __ID__`.
 - **Anchor entry before dependent entries** — links validate against entries present at save time. Save the anchor first to get its real kb-NNNN id, then save dependents.
 - **kb-build-index.js runs automatically after every save/edit** — don't call it manually. Only run it explicitly after `init` or if the index is suspected corrupt.
@@ -60,7 +60,7 @@ thesis, separate entries for distinct findings, joined with `part_of` /
      flip the direction — don't downgrade to `relates_to`. Reserve `relates_to`
      for when no directional rel fits _either way_ (peer ties, person↔team
      leadership). Torn between two rels in the SAME direction → prefer the weaker.
-   - `created`/`updated` = today.
+   - `created`/`updated` = today, as `YYYY-MM-DD`.
 3. **Save immediately** — pipe the entry to the helper via heredoc redirect
    (IMPORTANT: start the command with `node`, not `cat | node`):
    `node ${CLAUDE_SKILL_DIR}/scripts/kb-save.js --slug "<slug-from-title>" <<'EOF'`

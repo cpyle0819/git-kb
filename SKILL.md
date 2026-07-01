@@ -13,6 +13,18 @@ You are operating the user's personal knowledge base. It is a **git repo of
 markdown entries** (the `kb-data` repo). There is no database and no server —
 git is the persistence layer and the markdown files are the source of truth.
 
+## Two ways the KB surfaces
+
+1. **Automatic retrieval (the hook).** `scripts/kb-trigger.js` runs on every
+   `UserPromptSubmit` (wired via `hooks/hooks.json`). It tokenizes the prompt,
+   checks it against `kb-index.json`, and — if ≥2 distinct keywords hit — injects
+   the matching entries as `additionalContext`. **This is automatic; you never
+   invoke it.** No match (or a skip-pattern prompt like `git …`) → it emits
+   nothing and the prompt passes through untouched. This is the mechanism behind
+   "automatic knowledge-base retrieval for every prompt." Tuning notes live in
+   the README.
+2. **The `/kb` verbs (below).** Explicit `init` / `add` / `search` / `edit`.
+
 ## Dispatch first — do only what the verb needs
 
 The first token of `$ARGUMENTS` is the verb: `init`, `add`, `search`, or
