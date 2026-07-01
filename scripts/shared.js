@@ -2,11 +2,14 @@
 
 import { homedir } from "node:os";
 import { join } from "node:path";
+import { existsSync } from "node:fs";
 
 export function getConfigPath() {
-  return process.env.CLAUDE_PLUGIN_DATA
-    ? join(process.env.CLAUDE_PLUGIN_DATA, "kb-config.json")
-    : join(homedir(), ".claude", "kb-config.json");
+  if (process.env.CLAUDE_PLUGIN_DATA) {
+    const p = join(process.env.CLAUDE_PLUGIN_DATA, "kb-config.json");
+    if (existsSync(p)) return p;
+  }
+  return join(homedir(), ".claude", "kb-config.json");
 }
 
 // Expand a leading ~ (home dir) in a config path. Kept here so callers don't
