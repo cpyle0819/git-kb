@@ -78,17 +78,19 @@ function resolveDataDir() {
 }
 
 function pull(dataDir) {
-  let pullNote = "";
-  try {
-    git(
-      dataDir,
-      ["rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{u}"],
-      true,
-    );
-    git(dataDir, ["pull", "--quiet"], true);
-  } catch {
-    pullNote = "no upstream — local only";
+  // Distinguish "no upstream configured" (fine — local-only repo) from a real
+  // pull failure (network/auth/diverged). A genuine failure must ABORT the save:
+  // writing against a stale DB is exactly what the pull is meant to prevent.
+  const hasUpstream = gitTry(dataDir, [
+    "rev-parse",
+    "--abbrev-ref",
+    "--symbolic-full-name",
+    "@{u}",
+  ]).ok;
+  if (!hasUpstream) {
+    return { pullNote: "no upstream — local only" };
   }
+  const pulled = gitTry(dataDir, ["pull", "--quiet"]);
   const mergeHead = join(dataDir, ".git", "MERGE_HEAD");
   if (existsSync(mergeHead)) {
     return {
@@ -97,7 +99,15 @@ function pull(dataDir) {
       code: 6,
     };
   }
-  return { pullNote };
+  if (!pulled.ok) {
+    return {
+      error:
+        `ERROR: git pull failed — refusing to write against a stale DB.\n${pulled.out}\n` +
+        "Fix connectivity/auth (or resolve the divergence) in the data repo, then retry.",
+      code: 6,
+    };
+  }
+  return { pullNote: "pulled" };
 }
 
 function mapExistingEntries(entriesDir) {
