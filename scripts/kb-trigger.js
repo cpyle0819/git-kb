@@ -12,7 +12,7 @@ import { readFileSync, existsSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { execFileSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
-import { getConfigPath } from "./shared.js";
+import { getConfigPath, expandHome } from "./shared.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const THRESHOLD = 2; // minimum distinct keyword hits to trigger
@@ -78,7 +78,7 @@ function loadIndex() {
   const configPath = getConfigPath();
   try {
     const cfg = JSON.parse(readFileSync(configPath, "utf8"));
-    const dataDir = (cfg.data_dir ?? "").replace(/^~(?=$|\/)/, homedir());
+    const dataDir = expandHome(cfg.data_dir);
     const indexPath = join(dataDir, "kb-index.json");
     if (!existsSync(indexPath)) return null;
     return JSON.parse(readFileSync(indexPath, "utf8"));

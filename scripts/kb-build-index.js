@@ -7,7 +7,7 @@
 
 import { readFileSync, readdirSync, existsSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { getConfigPath } from "./shared.js";
+import { getConfigPath, expandHome } from "./shared.js";
 
 const STOP = new Set([
   "the", "a", "an", "of", "for", "to", "and", "or", "in", "on",
@@ -23,7 +23,7 @@ function resolveDataDir() {
   const configPath = getConfigPath();
   try {
     const cfg = JSON.parse(readFileSync(configPath, "utf8"));
-    const dataDir = (cfg.data_dir ?? "").replace(/^~(?=$|\/)/, homedir());
+    const dataDir = expandHome(cfg.data_dir);
     const entriesDir = join(dataDir, "entries");
     if (!dataDir || !existsSync(entriesDir)) {
       console.error(`ERROR: data_dir invalid or has no entries/: '${dataDir}'`);

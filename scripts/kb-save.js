@@ -12,7 +12,7 @@ import { join, dirname } from "node:path";
 import { execFileSync } from "node:child_process";
 import { parseArgs } from "node:util";
 import { fileURLToPath } from "node:url";
-import { getConfigPath } from "./shared.js";
+import { getConfigPath, expandHome } from "./shared.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -53,7 +53,7 @@ function resolveDataDir() {
   let dataDir;
   try {
     const cfg = JSON.parse(readFileSync(configPath, "utf8"));
-    dataDir = (cfg.data_dir ?? "").replace(/^~(?=$|\/)/, homedir());
+    dataDir = expandHome(cfg.data_dir);
   } catch {
     return {
       error: `ERROR: cannot read ${configPath} (run /kb init to set up the data repo)`,
