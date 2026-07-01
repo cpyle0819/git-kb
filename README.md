@@ -47,6 +47,8 @@ scripts/
   kb-search.js               lexical search, ranked by field weight
   kb-save.js                 validate + write + commit + push + rebuild index
   shared.js                  getConfigPath() — shared config resolution
+workflows/
+  test-skill.js              /test-skill — fresh-eyes test harness (see below)
 ```
 
 ## Usage
@@ -57,6 +59,29 @@ scripts/
 | `/kb add <knowledge>` | Draft + save + commit + push an entry |
 | `/kb search <query>` | Ranked search with query expansion |
 | `/kb edit <id or desc> <change>` | Modify an entry in place |
+| `/test-skill` | Fresh-eyes test of the skill (see below) |
+
+## Testing the skill
+
+`/test-skill` runs an isolated, self-verifying test of the whole skill. It:
+
+1. **Setup** — creates a throwaway scratch kb-data repo in a temp dir (via
+   `mktemp`) with a temp `CLAUDE_PLUGIN_DATA` config and three seeded entries.
+   Your real KB and its remote are never touched; the scratch repo has no
+   remote, so pushes resolve harmlessly to `NO_REMOTE`.
+2. **Exercise** — spawns fresh agents that learn the skill only from its docs
+   and perform user tasks: add a decision, add a bookmark, edit an entry
+   (serially, since they share one git repo), then search by keyword, search
+   with `--type`, and fire the auto-trigger hook with a matching and a
+   non-matching prompt (in parallel).
+3. **Verify** — separate adversarial agents inspect the scratch repo's git log
+   and entry files directly to confirm each outcome, rather than trusting the
+   test agents' self-reports.
+4. **Teardown** — removes the scratch dirs (runs even if a test throws).
+
+The report gives pass/fail per test plus **doc-followability friction** — every
+point where a fresh agent found the docs ambiguous or had to guess. That
+friction is the signal for improving SKILL.md and the reference files.
 
 ## Tuning the auto-trigger
 
