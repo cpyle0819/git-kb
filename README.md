@@ -48,7 +48,7 @@ scripts/
   kb-save.js                 validate + write + commit + push + rebuild index
   shared.js                  getConfigPath() — shared config resolution
 workflows/
-  test-skill.js              /test-skill — fresh-eyes test harness (see below)
+  test-skill.js              /kb:test-skill — fresh-eyes test harness (see below)
 ```
 
 ## Usage
@@ -60,6 +60,17 @@ workflows/
 | `/kb search <query>` | Ranked search with query expansion |
 | `/kb edit <id or desc> <change>` | Modify an entry in place |
 | `/kb:test-skill` | Fresh-eyes test of the skill (see below) |
+
+**Automatic retrieval has no command.** Once `/kb init` has run, the
+`UserPromptSubmit` hook fires on every prompt with no action from you — see
+[Two layers of access](#two-layers-of-access). The `/kb` verbs are the only
+part you invoke explicitly; the hook is always-on background context injection.
+
+**Per-session dedup.** When the hook injects an entry, it records the entry ID
+in a per-session ledger under the temp dir, so a later prompt that matches the
+same entry does not re-inject it — each entry lands in a session's context at
+most once. Any add/edit rebuilds the index, which resets the ledger, so new or
+changed entries resurface. A fresh session starts with an empty ledger.
 
 ## Testing the skill
 
