@@ -6,8 +6,8 @@
 //   to the data repo root. Designed to run after every add/edit.
 
 import { readFileSync, readdirSync, existsSync, writeFileSync } from "node:fs";
-import { homedir } from "node:os";
 import { join } from "node:path";
+import { getConfigPath } from "./shared.js";
 
 const STOP = new Set([
   "the", "a", "an", "of", "for", "to", "and", "or", "in", "on",
@@ -20,7 +20,7 @@ const STOP = new Set([
 ]);
 
 function resolveDataDir() {
-  const configPath = join(homedir(), ".claude", "kb-config.json");
+  const configPath = getConfigPath();
   try {
     const cfg = JSON.parse(readFileSync(configPath, "utf8"));
     const dataDir = (cfg.data_dir ?? "").replace(/^~(?=$|\/)/, homedir());
@@ -31,7 +31,7 @@ function resolveDataDir() {
     }
     return { dataDir, entriesDir };
   } catch {
-    console.error("ERROR: cannot read kb-config.json (run /kb init)");
+    console.error(`ERROR: cannot read ${configPath} (run /kb init)`);
     process.exit(3);
   }
 }

@@ -9,10 +9,10 @@
 // Exit 0 with JSON stdout = additionalContext injected.
 
 import { readFileSync, existsSync } from "node:fs";
-import { homedir } from "node:os";
 import { join, dirname } from "node:path";
 import { execFileSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
+import { getConfigPath } from "./shared.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const THRESHOLD = 2; // minimum distinct keyword hits to trigger
@@ -75,7 +75,7 @@ function tokenize(text) {
 }
 
 function loadIndex() {
-  const configPath = join(homedir(), ".claude", "kb-config.json");
+  const configPath = getConfigPath();
   try {
     const cfg = JSON.parse(readFileSync(configPath, "utf8"));
     const dataDir = (cfg.data_dir ?? "").replace(/^~(?=$|\/)/, homedir());

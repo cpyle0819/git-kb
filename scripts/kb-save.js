@@ -8,11 +8,11 @@
 //   stdin must contain the real `id: kb-NNNN`. Overwrites in place (no new id).
 
 import { readFileSync, readdirSync, existsSync, writeFileSync } from "node:fs";
-import { homedir } from "node:os";
 import { join, dirname } from "node:path";
 import { execFileSync } from "node:child_process";
 import { parseArgs } from "node:util";
 import { fileURLToPath } from "node:url";
+import { getConfigPath } from "./shared.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -49,7 +49,7 @@ function gitTry(dir, args) {
 }
 
 function resolveDataDir() {
-  const configPath = join(homedir(), ".claude", "kb-config.json");
+  const configPath = getConfigPath();
   let dataDir;
   try {
     const cfg = JSON.parse(readFileSync(configPath, "utf8"));

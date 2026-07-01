@@ -1,10 +1,10 @@
 ---
 name: kb
-description: Manage a git-backed personal knowledge base (init / add / search / edit). Invoke for "/kb init", "/kb add <knowledge>", "/kb search <query>", "/kb edit <id> <change>".
+description: Automatic knowledge-base (kb) retrieval for every prompt. Uses keywords to keep the user's session hydrated with appropriate context.
 argument-hint: <verb> <content> # verb = init|add|search|edit
 model: sonnet
 effort: low
-allowed-tools: Read, Write(~/.claude/kb-config.json), Bash(node ${CLAUDE_SKILL_DIR}/scripts/kb-search.js *), Bash(node ${CLAUDE_SKILL_DIR}/scripts/kb-save.js *), Bash(node ${CLAUDE_SKILL_DIR}/scripts/kb-build-index.js)
+allowed-tools: Read, Write(${CLAUDE_PLUGIN_DATA}/kb-config.json), Bash(node ${CLAUDE_SKILL_DIR}/scripts/kb-search.js *), Bash(node ${CLAUDE_SKILL_DIR}/scripts/kb-save.js *), Bash(node ${CLAUDE_SKILL_DIR}/scripts/kb-build-index.js), Bash(git clone *), Bash(git init *), Bash(mkdir *), AskUserQuestion
 ---
 
 # /kb — git-backed knowledge base
@@ -23,15 +23,33 @@ user the valid verbs and stop (no natural-language fallback in v1).
 
 - `init` — the one explicit setup step: point the KB at its `data_dir` (clone
   an existing repo, register an existing local clone, or start a fresh one) and
-  write `~/.claude/kb-config.json`. See [init](#init--set-up-the-data-repo).
+  write `${CLAUDE_PLUGIN_DATA}/kb-config.json`. See [init](#init--set-up-the-data-repo).
 - `search` — needs nothing first. The helper script resolves `data_dir` and
   validates it itself. Just run it (below).
 - `add` — needs the spec (to write a valid entry); helper handles `data_dir`/git.
 - `edit` — like `add`, for changing an EXISTING entry in place (facts/refinements).
 
 `data_dir` is the local clone of the **kb-data** repo (holds `entries/` and
-`kb.json`), read only from **`~/.claude/kb-config.json`** (key `data_dir`;
+`kb.json`), read from **`${CLAUDE_PLUGIN_DATA}/kb-config.json`** (key `data_dir`;
 resolve `~`). It is set up only by `init`.
+
+---
+
+## Gotchas
+
+- **Heredoc must start with `node`** — the allowed-tools pattern is `Bash(node ${CLAUDE_SKILL_DIR}/scripts/kb-save.js *)`. Using `cat entry.md | node kb-save.js` won't match and the call will be blocked.
+- **Check for `SAVED`/`EDITED`, not just absence of `ERROR:`** — kb-save.js also exits 0 on `NO_CHANGES` (identical content after pull). This is not an error; it commonly means a prior save already succeeded.
+- **Pull failure = hard abort** — if `git pull` fails (network/auth/diverged), kb-save.js exits 6 with `ERROR: git pull failed — refusing to write against a stale DB.` The commit never happens. Fix connectivity before retrying.
+- **Merge conflict after pull** — prints `ERROR: git pull left a merge conflict.` (code 6). Don't retry blindly — the user must resolve it in the data repo first.
+- **Local commit without push** — `push:` line says `committed locally but NOT pushed`. The entry IS saved. Don't re-run kb-save.js (it will find NO_CHANGES and obscure the local-only state). Relay the message and suggest retrying push later.
+- **`NO_REMOTE` ≠ push failure** — means no git remote configured. Ask the user for the URL and run `kb-save.js --set-remote <url>`. Never call `--set-remote` unless the push line explicitly said `NO_REMOTE` — if origin already exists it will error.
+- **`id: __ID__` must be unquoted** — `id: '__ID__'` causes kb-save.js to exit 2: `ERROR: stdin frontmatter must contain id: __ID__`.
+- **Anchor entry before dependent entries** — links validate against entries present at save time. Save the anchor first to get its real kb-NNNN id, then save dependents.
+- **`--type` filter is case-sensitive lowercase** — `lesson_learned` works; `LessonLearned` silently returns no matches.
+- **kb-build-index.js runs automatically after every save/edit** — don't call it manually after `add`/`edit`. Only run it explicitly after `init` or if the index is suspected corrupt.
+- **Five entry types, not four** — the authoritative list is in kb-save.js: `factual_reference`, `decision`, `pattern_convention`, `lesson_learned`, `bookmark`.
+
+---
 
 **Not configured yet?** `search`/`add`/`edit` each run a helper that resolves
 `data_dir` itself. If a helper exits with a `data_dir` `ERROR:` (config missing,
@@ -44,40 +62,34 @@ path absent, or not a valid repo), stop and point the user to `/kb init`:
 
 ### init — set up the data repo
 
-Payload: optional (a clone URL, a local path, or instructions). This is the
-single place `data_dir` gets configured. Goal: end with a valid kb-data repo
-(holds `entries/` + `kb.json`) and `~/.claude/kb-config.json` pointing at it.
+Payload: optional (a clone URL, a local path, or instructions). Goal: end with
+a valid kb-data repo (holds `entries/` + `kb.json`) and
+`${CLAUDE_PLUGIN_DATA}/kb-config.json` pointing at it. This is the only place
+`data_dir` gets configured.
 
-1. **Read the current config** at `~/.claude/kb-config.json` (resolve `~`).
-   - **Already configured** (`data_dir` set to a valid repo): tell the user
-     what it points at and ask whether they want to change it. If no, stop —
-     setup is already done. If yes, continue as if unset, using their new
-     answer.
-   - **Not configured** (file/key missing, or path is absent/not a repo): ask
-     the user how they want to provide the data repo, unless the payload
-     already answers it. The three ways:
-     - **Clone an existing repo** — they give a clone URL (and optionally a
-       target path). Run the clone (e.g. `git clone <url> <path>`, or whatever
-       custom command they specify — some hosts need a non-`git` clone). For a
-       sensitive KB the URL should be an internal git host.
-     - **Register an existing local clone** — they give a path that is already
-       a kb-data repo (they cloned it themselves). Use it as-is.
-     - **Start a new repo** — they give a target path with nothing there yet.
-       Create it: `mkdir -p <path>`, `git init <path>`, create `entries/` and
-       `kb.json` (`{"schema_version": 1, "next_id": 1}`). No remote — the
-       skill prompts for one on the first `NO_REMOTE` push.
-2. **Confirm before any clone / init / mkdir** — these create or fetch
-   directories. State exactly what you'll run and where, then do it.
-3. **Validate** the resulting path is a git repo containing `entries/` and
-   `kb.json`. If a freshly cloned/registered repo lacks them, tell the user the
-   path isn't a kb-data repo and stop — don't silently scaffold over it.
-4. **Write the config**: `{"data_dir": "<resolved-absolute-path>"}` to
-   `~/.claude/kb-config.json` (this is the only file the skill writes directly).
-5. **Build the search index**: run
-   `node ${CLAUDE_SKILL_DIR}/scripts/kb-build-index.js` — this generates
-   `kb-index.json` (used by the auto-trigger hook to decide when to inject KB
-   context) and ensures it's gitignored in the data repo.
-   Then confirm setup is complete and that `add`/`search`/`edit` now work.
+**If already configured** (`data_dir` set to a valid repo): tell the user what
+it points at and ask whether they want to change it. Stop if no.
+
+**If not configured**: ask how they want to provide the repo (unless the payload
+already answers). Three ways:
+- **Clone an existing repo** — `git clone <url> <path>` (some hosts need a
+  custom clone command). For sensitive data, use an internal git host.
+- **Register an existing local clone** — use the given path as-is.
+- **Start a new repo** — `mkdir -p <path>`, `git init <path>`, create
+  `entries/` and `kb.json` (`{"schema_version": 1, "next_id": 1}`). No remote
+  needed yet — the skill prompts for one on the first `NO_REMOTE` push.
+
+**Confirm before any clone / init / mkdir** — state exactly what you'll run and where.
+
+After obtaining the path: validate it's a git repo containing `entries/` and
+`kb.json`. If it lacks them, stop and tell the user — don't scaffold over an
+unknown repo.
+
+Write `{"data_dir": "<resolved-absolute-path>"}` to
+`${CLAUDE_PLUGIN_DATA}/kb-config.json` (the only file the skill writes
+directly), then run `node ${CLAUDE_SKILL_DIR}/scripts/kb-build-index.js` to
+generate `kb-index.json` (used by the auto-trigger hook). Confirm setup is
+complete.
 
 ---
 
@@ -98,14 +110,11 @@ focused entries and link them (e.g. a `factual_reference` for the core
 thesis, separate entries for distinct findings, joined with `part_of` /
 `relates_to`). Atomic entries keep search scannable and the graph meaningful.
 
-1. Read the spec at `${CLAUDE_SKILL_DIR}/spec/entry-format.md` — you need it to
-   write valid frontmatter. (No need to read `kb.json` or pull — the helper
-   handles ids and syncing.)
-2. **Find candidate link targets.** To propose `links`, you need the ids of
+1. **Find candidate link targets.** To propose `links`, you need the ids of
    related existing entries: run the search helper with terms from the new
    knowledge (`node ${CLAUDE_SKILL_DIR}/scripts/kb-search.js "<term>" ...`) and
    note the `kb-NNNN` ids of genuine matches. Only link to ids it returns.
-3. **Draft the entry** (use `id: __ID__` as a placeholder — the helper assigns
+2. **Draft the entry** (use `id: __ID__` as a placeholder — the helper assigns
    the real id):
    - **`type`** — `bookmark` if the input is a URL/link to save (requires a
      `url:` frontmatter field); `decision` if it states a choice + rationale;
@@ -115,7 +124,7 @@ thesis, separate entries for distinct findings, joined with `part_of` /
    - `title` + a concise markdown body (for bookmarks: body is optional
      notes/context about _why_ you saved it).
    - `tags` (free-form).
-   - `links` — closed `rel` set only; `to:` only ids confirmed in step 2.
+   - `links` — closed `rel` set only; `to:` only ids confirmed in step 1.
      **`rel` guidance:** `supersedes` ONLY when `to:` is the specific entry being
      replaced (if the replaced thing has no entry, use `relates_to`); `part_of`
      for component-of; `depends_on` for requires/builds-on; `mentions` for a
@@ -128,7 +137,7 @@ thesis, separate entries for distinct findings, joined with `part_of` /
      for when no directional rel fits _either way_ (peer ties, person↔team
      leadership). Torn between two rels in the SAME direction → prefer the weaker.
    - `created`/`updated` = today.
-4. **Save immediately** — pipe the entry to the helper via heredoc redirect
+3. **Save immediately** — pipe the entry to the helper via heredoc redirect
    (IMPORTANT: start the command with `node`, not `cat | node`):
    `node ${CLAUDE_SKILL_DIR}/scripts/kb-save.js --slug "<slug-from-title>" <<'EOF'`
    It resolves `data_dir`, pulls (if upstream), assigns a collision-free id,

@@ -5,9 +5,9 @@
 //   Pass "*" as the sole term to list all (useful with --type).
 
 import { readFileSync, readdirSync, existsSync } from "node:fs";
-import { homedir } from "node:os";
 import { join } from "node:path";
 import { parseArgs } from "node:util";
+import { getConfigPath } from "./shared.js";
 
 // ─── Core ────────────────────────────────────────────────────────────────────
 
@@ -58,7 +58,7 @@ function parseEntry(text) {
 }
 
 function resolveDataDir() {
-  const configPath = join(homedir(), ".claude", "kb-config.json");
+  const configPath = getConfigPath();
   let dataDir;
   try {
     const cfg = JSON.parse(readFileSync(configPath, "utf8"));
