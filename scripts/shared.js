@@ -36,17 +36,77 @@ export function parseEntry(text) {
     .filter(Boolean);
   const links = [...fm.matchAll(/to:[ \t]*(kb-\d+)/g)].map((x) => x[1]);
   const url = get("url") || null;
+  // Cross-cutting retrieval fields (see spec/entry-format.md). `always` injects
+  // the entry on every prompt; `applies_to` injects it when the prompt's
+  // activity matches (both still subject to per-session dedup).
+  const always = /^(true|yes)$/i.test(get("always"));
+  const appliesTo = get("applies_to")
+    .replace(/^\[|\]$/g, "")
+    .split(",")
+    .map((s) => s.trim().toLowerCase())
+    .filter(Boolean);
   return {
     id: get("id"),
     title: get("title"),
     type: get("type"),
     url,
     tags,
+    always,
+    appliesTo,
     links,
     created: get("created"),
     updated: get("updated"),
     body: body.trim(),
   };
+}
+
+// ─── Activity classification ───────────────────────────────────────────────────
+// Cross-cutting entries (e.g. writing-style rules) are relevant based on the
+// KIND of work a prompt asks for, not the nouns it names. "reply to this thread"
+// needs the writing guidance but shares no keyword with it. We classify the
+// prompt's activity from a static lexicon of trigger words — deterministic and
+// cheap (a set lookup over already-tokenized words), no LLM, no embeddings.
+//
+// This is a tuning knob, like SKIP_PATTERNS: add trigger words as false
+// negatives surface. Keys are activity names an entry can list in `applies_to`.
+export const ACTIVITY_LEXICON = {
+  writing: [
+    "write", "writing", "wrote", "draft", "drafting", "author", "authoring",
+    "compose", "rewrite", "reword", "rephrase", "edit", "revise", "proofread",
+    "summarize", "summary", "summarise", "prose", "wording", "phrasing", "tone",
+    "reply", "respond", "response", "message", "email", "comment", "note",
+    "thread", "post", "announcement", "blurb", "copy", "readme", "doc", "docs",
+    "documentation", "changelog", "ticket", "commit", "description", "update",
+  ],
+  reviewing: [
+    "review", "reviewing", "critique", "criticize", "feedback", "audit",
+    "assess", "evaluate", "appraise", "inspect",
+  ],
+  planning: [
+    "plan", "planning", "design", "designing", "roadmap", "strategy",
+    "approach", "proposal", "propose", "architect", "architecture", "scope",
+  ],
+  coding: [
+    "code", "coding", "implement", "implementation", "refactor", "debug",
+    "fix", "build", "compile", "test", "function", "class", "bug", "patch",
+  ],
+};
+
+// Given the prompt's already-tokenized words (a Set or array of lowercase
+// tokens), return the set of active activity names. An activity is active if any
+// of its trigger words appears among the tokens.
+export function classifyActivities(tokens) {
+  const set = tokens instanceof Set ? tokens : new Set(tokens);
+  const active = new Set();
+  for (const [activity, triggers] of Object.entries(ACTIVITY_LEXICON)) {
+    for (const t of triggers) {
+      if (set.has(t)) {
+        active.add(activity);
+        break;
+      }
+    }
+  }
+  return active;
 }
 
 // Resolve the kb-data repo's entries/ dir from the config file. Returns

@@ -62,6 +62,29 @@ thesis, separate entries for distinct findings, joined with `part_of` /
      flip the direction — don't downgrade to `relates_to`. Reserve `relates_to`
      for when no directional rel fits _either way_ (peer ties, person↔team
      leadership). Torn between two rels in the SAME direction → prefer the weaker.
+   - **`always` / `applies_to`** (cross-cutting retrieval — usually OMIT both).
+     The auto-lookup hook normally surfaces an entry only when the prompt shares
+     keywords with its tags/title. These two optional fields let an entry surface
+     on prompts that never name its subject. Most entries want neither — a fact,
+     a decision, a bookmark is relevant when its topic comes up, which keywords
+     already handle. Add one ONLY when the entry is genuinely cross-cutting:
+     - **`applies_to: [<activity>, …]`** — for guidance that applies to a *kind of
+       work* rather than a topic (e.g. writing-style rules relevant whenever the
+       assistant authors output, no matter the subject). The entry then injects
+       whenever the prompt's activity matches. Valid activities are a closed set
+       keyed to the classifier: **`writing`** (drafting/editing any prose — a
+       ticket, CR, comment, reply, summary, doc), **`reviewing`** (critique,
+       feedback, audit), **`planning`** (design, roadmap, approach), **`coding`**
+       (implement, refactor, debug, test). Use `writing` for style/prose rules,
+       `reviewing` for review checklists, and so on. Value is a YAML flow list of
+       these names, lowercase.
+     - **`always: true`** — for an entry that should be in context on *every*
+       prompt this session (safety rules, a standing constraint). Stronger and
+       blunter than `applies_to`; reserve it for the few entries that truly apply
+       regardless of activity. Per-session dedup still holds, so an `always` entry
+       injects at most once per session, not on literally every prompt.
+     Both are subject to the same dedup ledger as keyword matches. Prefer the
+     narrower `applies_to` over `always` when the entry is tied to a kind of work.
    - `created`/`updated` = today, as `YYYY-MM-DD`.
 
    **Canonical entry shape** (frontmatter is a YAML block between `---` fences;
@@ -74,6 +97,8 @@ thesis, separate entries for distinct findings, joined with `part_of` /
    type: decision
    url:                       # required for bookmark, omit otherwise
    tags: [database, analytics, postgres]
+   applies_to:                # optional; cross-cutting entries only (see above)
+   always:                    # optional; every-prompt entries only (see above)
    links:
      - rel: relates_to
        to: kb-0002
@@ -116,9 +141,11 @@ replaced** by new thinking, do NOT edit in place — `add` a new entry with a
    top hits — **use that content directly; do NOT re-read the entry file.** If
    the entry wasn't in the search results, read it then, but only then.
 2. **Draft the full updated entry** using the content from step 1 and the
-   type/rel/direction rules from the `add` section above. Keep the real `id:`
-   (not `__ID__`), apply the change, bump `updated:` to today, keep `created:`
-   as-is.
+   type/rel/direction rules from the `add` section above (including the
+   `always`/`applies_to` cross-cutting fields — preserve any already set, and
+   add one if the edit turns the entry into cross-cutting guidance). Keep the
+   real `id:` (not `__ID__`), apply the change, bump `updated:` to today, keep
+   `created:` as-is.
 3. **Save immediately** — pipe the full updated entry via heredoc redirect
    (IMPORTANT: start the command with `node`, not `cat | node`):
    `node ${CLAUDE_SKILL_DIR}/scripts/kb-save.js --edit <id> [--slug "<new-slug>"] <<'EOF'`

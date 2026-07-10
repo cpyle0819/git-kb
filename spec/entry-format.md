@@ -71,6 +71,8 @@ The body has no required structure.
 | `type`    | yes      | enum         | Closed set — see below.                                                                                                       |
 | `url`     | no       | string       | A full URL (`https://...`). Required for `type: bookmark`; optional for others (e.g. a factual_reference with a source link). |
 | `tags`    | no       | list[string] | **Free-form.** Lowercase, hyphenated. Primary lexical-search and filter signal; matched as wildcards. `[]` if none.           |
+| `applies_to` | no    | list[enum]   | **Cross-cutting retrieval.** Activities this entry applies to, so it surfaces on prompts of that *kind* even with no keyword overlap. Closed set: `writing`, `reviewing`, `planning`, `coding`. Omit for topic-scoped entries.        |
+| `always`  | no       | bool         | **Cross-cutting retrieval.** `true` = inject on every prompt this session (once, via dedup). For standing rules only; prefer `applies_to` when the entry is tied to a kind of work.                                                    |
 | `links`   | no       | list[edge]   | Curated graph edges; `rel` is a closed set. `[]` if none.                                                                     |
 | `created` | yes      | `YYYY-MM-DD` | Set once at add.                                                                                                              |
 | `updated` | yes      | `YYYY-MM-DD` | Bumped on edit. (For real history, use `git log --follow`.)                                                                   |
@@ -93,6 +95,27 @@ set only by editing this spec.
 No controlled vocabulary. Any lowercase, hyphenated token is valid. Tags are the
 main lexical/filter signal and are matched as wildcards (e.g. a search for
 `deploy` matches the tag `deployment`). Use as many as are genuinely useful.
+
+### `applies_to` / `always` — cross-cutting retrieval
+
+Keyword matching surfaces an entry when the prompt names its subject. That
+structurally misses guidance relevant to a *kind of work* the prompt never names
+— writing-style rules apply to "reply to this thread" though it shares no style
+keyword. These two optional fields close that gap; the auto-lookup hook
+(`kb-trigger.js`) honors them.
+
+- **`applies_to`** lists **activities** (closed set: `writing`, `reviewing`,
+  `planning`, `coding`). The hook classifies each prompt's activity from a static
+  trigger-word lexicon (`ACTIVITY_LEXICON` in `shared.js`) and injects an entry
+  whenever the prompt's activity intersects its `applies_to` — at zero keyword
+  overlap. The lexicon is a tuning knob: extend it as false negatives surface.
+- **`always: true`** injects the entry on every non-skipped prompt.
+
+Both are gated by the same per-session dedup ledger as keyword matches, so a
+cross-cutting entry injects **at most once per session**, not on every prompt.
+Cross-cutting entries are ordered ahead of keyword matches so the context cap
+(`MAX_CONTEXT_ENTRIES`) never starves them. Use these sparingly — most entries
+are topic-scoped and want neither.
 
 ### `links` — the graph
 

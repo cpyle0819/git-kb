@@ -105,9 +105,40 @@ friction is the signal for improving SKILL.md and the reference files.
 
 In `scripts/kb-trigger.js`:
 
-- `THRESHOLD` (default 2) — distinct keyword hits required to fire
-- `MAX_CONTEXT_ENTRIES` (default 5) — entries injected per match
+- `THRESHOLD` (default 2) — distinct keyword hits required to fire the keyword path
+- `MAX_CONTEXT_ENTRIES` (default 5) — entries injected per prompt
 - `SKIP_PATTERNS` — regex array of prompts that never trigger
+
+In `scripts/shared.js`:
+
+- `ACTIVITY_LEXICON` — activity → trigger-word map used to classify a prompt's
+  *kind of work*. Extend a list when a cross-cutting entry should have fired but
+  didn't (a false negative).
+
+### Cross-cutting retrieval (beyond keywords)
+
+Keyword overlap misses entries relevant to a *kind of work* the prompt never
+names (writing-style rules on "reply to this thread"). Two optional frontmatter
+fields close that gap, both honored by the hook and gated by the same
+per-session dedup ledger as keyword matches (so an entry injects at most once
+per session):
+
+- `applies_to: [writing|reviewing|planning|coding, …]` — inject when the prompt's
+  classified activity matches, at zero keyword overlap.
+- `always: true` — inject on every non-skipped prompt.
+
+Cross-cutting entries are ordered ahead of keyword matches so the context cap
+can't starve them. See [`spec/entry-format.md`](spec/entry-format.md) for the
+field contract and when to use each.
+
+### Observability
+
+Set `KB_HOOK_DEBUG=1` to append a per-prompt JSONL record to
+`<tmpdir>/kb-hook-cache/debug.jsonl`: keyword hits, detected activities, injected
+ids (with which signal surfaced each), and near-misses — keyword hits below
+`THRESHOLD` and relevant entries cut by the per-prompt cap. This makes a
+non-surfaced entry observable instead of silent, so retrieval quality can be
+measured. Off by default; the non-match path stays a pure in-memory index lookup.
 
 ## Trade-offs
 

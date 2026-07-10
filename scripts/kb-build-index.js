@@ -4,10 +4,17 @@
 // Usage:  node kb-build-index.js
 //   Reads all entries, extracts tags + title words, writes kb-index.json
 //   to the data repo root. Designed to run after every add/edit.
+//
+// The index is a flat map of key → [entry ids]. Most keys are prompt keywords
+// (tags, title words, type). Two reserved keys carry the cross-cutting signals
+// the hook uses when the prompt shares no keyword with an entry:
+//   __always__            → ids of entries with `always: true`
+//   __activity:<name>__   → ids of entries whose `applies_to` lists <name>
+// The `__…__` shape can't collide with a prompt token (tokens are [a-z0-9]).
 
-import { readFileSync, readdirSync, existsSync, writeFileSync } from "node:fs";
+import { readFileSync, existsSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { getConfigPath, expandHome } from "./shared.js";
+import { resolveDataDir, loadEntries } from "./shared.js";
 
 const STOP = new Set([
   "the", "a", "an", "of", "for", "to", "and", "or", "in", "on",
@@ -19,45 +26,6 @@ const STOP = new Set([
   "up", "out", "them", "then", "each", "any", "these", "some",
 ]);
 
-function resolveDataDir() {
-  const configPath = getConfigPath();
-  try {
-    const cfg = JSON.parse(readFileSync(configPath, "utf8"));
-    const dataDir = expandHome(cfg.data_dir);
-    const entriesDir = join(dataDir, "entries");
-    if (!dataDir || !existsSync(entriesDir)) {
-      console.error(`ERROR: data_dir invalid or has no entries/: '${dataDir}'`);
-      process.exit(4);
-    }
-    return { dataDir, entriesDir };
-  } catch {
-    console.error(`ERROR: cannot read ${configPath} (run /kb init)`);
-    process.exit(3);
-  }
-}
-
-function parseEntry(text) {
-  const m = text.match(/^---\n([\s\S]*?)\n---/);
-  if (!m) return null;
-  const fm = m[1];
-  const get = (k) => {
-    const r = fm.match(new RegExp(`^${k}:[ \\t]*(.*)$`, "m"));
-    return r ? r[1].trim() : "";
-  };
-  const tagsRaw = get("tags");
-  const tags = tagsRaw
-    .replace(/^\[|\]$/g, "")
-    .split(",")
-    .map((s) => s.trim().toLowerCase())
-    .filter(Boolean);
-  return {
-    id: get("id"),
-    title: get("title"),
-    type: get("type"),
-    tags,
-  };
-}
-
 function tokenizeTitle(title) {
   return title
     .toLowerCase()
@@ -65,10 +33,15 @@ function tokenizeTitle(title) {
     .filter((w) => w.length > 2 && !STOP.has(w));
 }
 
-const { dataDir, entriesDir } = resolveDataDir();
-const files = readdirSync(entriesDir).filter((f) => f.endsWith(".md"));
+const resolved = resolveDataDir();
+if (resolved.error) {
+  console.error(resolved.error);
+  process.exit(resolved.code);
+}
+const { dataDir, entriesDir } = resolved;
+const { entries } = loadEntries(entriesDir);
 
-// Build keyword → [ids] map
+// Build key → [ids] map
 const index = {};
 
 function addKeyword(keyword, id) {
@@ -76,14 +49,14 @@ function addKeyword(keyword, id) {
   if (!index[keyword].includes(id)) index[keyword].push(id);
 }
 
-for (const f of files) {
-  const e = parseEntry(readFileSync(join(entriesDir, f), "utf8"));
-  if (!e) continue;
+for (const e of entries) {
+  if (!e.id) continue;
 
   for (const tag of e.tags) {
     // Tags can be multi-word (hyphenated) — index both full tag and parts
-    addKeyword(tag, e.id);
-    for (const part of tag.split("-").filter((p) => p.length > 2)) {
+    const t = tag.toLowerCase();
+    addKeyword(t, e.id);
+    for (const part of t.split("-").filter((p) => p.length > 2)) {
       addKeyword(part, e.id);
     }
   }
@@ -93,7 +66,13 @@ for (const f of files) {
   }
 
   // Index the type itself as a keyword
-  if (e.type) addKeyword(e.type, e.id);
+  if (e.type) addKeyword(e.type.toLowerCase(), e.id);
+
+  // Cross-cutting signals — reserved keys, unreachable by prompt tokens.
+  if (e.always) addKeyword("__always__", e.id);
+  for (const activity of e.appliesTo) {
+    addKeyword(`__activity:${activity}__`, e.id);
+  }
 }
 
 // Ensure kb-index.json is gitignored in the data repo
@@ -116,5 +95,5 @@ const outputPath = join(dataDir, "kb-index.json");
 writeFileSync(outputPath, JSON.stringify(index, null, 2) + "\n");
 
 const keyCount = Object.keys(index).length;
-const entryCount = files.length;
+const entryCount = entries.length;
 console.log(`INDEX_BUILT ${keyCount} keywords from ${entryCount} entries → ${outputPath}`);

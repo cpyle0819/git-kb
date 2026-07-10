@@ -32,6 +32,10 @@ const TYPE = new Set([
   "lesson_learned",
   "bookmark",
 ]);
+// Cross-cutting `applies_to` activities — must match ACTIVITY_LEXICON keys in
+// shared.js (kept as a literal here to avoid importing the lexicon just to
+// validate against its key set).
+const ACTIVITY = new Set(["writing", "reviewing", "planning", "coding"]);
 
 function git(dir, args, quiet = false) {
   return execFileSync("git", ["-C", dir, ...args], {
@@ -145,6 +149,18 @@ function validate(fm, id, existing) {
     errors.push(`type '${get("type")}' not in closed enum`);
   if (get("type") === "bookmark" && !get("url"))
     errors.push("type 'bookmark' requires a `url:` field");
+  const always = get("always");
+  if (always && !/^(true|false|yes|no)$/i.test(always))
+    errors.push(`always '${always}' must be true/false (or omitted)`);
+  const appliesTo = get("applies_to")
+    .replace(/^\[|\]$/g, "")
+    .split(",")
+    .map((s) => s.trim().toLowerCase())
+    .filter(Boolean);
+  for (const a of appliesTo) {
+    if (!ACTIVITY.has(a))
+      errors.push(`applies_to '${a}' not in closed enum (writing, reviewing, planning, coding)`);
+  }
   for (const r of [...fm.matchAll(/rel:[ \t]*(\S+)/g)]) {
     if (!REL.has(r[1])) errors.push(`rel '${r[1]}' not in closed enum`);
   }
