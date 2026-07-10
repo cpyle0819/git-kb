@@ -45,8 +45,9 @@ scripts/
   kb-trigger.js              hook: tokenize prompt, check index, inject context
   kb-build-index.js          rebuild keyword→id map from entry frontmatter
   kb-search.js               lexical search, ranked by field weight
+  kb-get.js                  fetch entries by ID, printed verbatim
   kb-save.js                 validate + write + commit + push + rebuild index
-  shared.js                  getConfigPath() — shared config resolution
+  shared.js                  config resolution + entry parse/load helpers
 workflows/
   test-skill.js              /kb:test-skill — fresh-eyes test harness (see below)
 ```
@@ -58,6 +59,7 @@ workflows/
 | `/kb init` | One-time setup: wire data repo, build index |
 | `/kb add <knowledge>` | Draft + save + commit + push an entry |
 | `/kb search <query>` | Ranked search with query expansion |
+| `kb-get.js <id>…` | Fetch known entries by ID verbatim (follow `[[kb-XXXXX]]` links) |
 | `/kb edit <id or desc> <change>` | Modify an entry in place |
 | `/kb:test-skill` | Fresh-eyes test of the skill (see below) |
 

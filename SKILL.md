@@ -4,7 +4,7 @@ description: Automatic knowledge-base (kb) retrieval for every prompt. Uses keyw
 argument-hint: <verb> <content> # verb = init|add|search|edit
 model: sonnet
 effort: low
-allowed-tools: Read, Write(${CLAUDE_PLUGIN_DATA}/kb-config.json), Bash(node ${CLAUDE_SKILL_DIR}/scripts/kb-search.js *), Bash(node ${CLAUDE_SKILL_DIR}/scripts/kb-save.js *), Bash(node ${CLAUDE_SKILL_DIR}/scripts/kb-build-index.js), Bash(git clone *), Bash(git init *), Bash(mkdir *), AskUserQuestion
+allowed-tools: Read, Write(${CLAUDE_PLUGIN_DATA}/kb-config.json), Bash(node ${CLAUDE_SKILL_DIR}/scripts/kb-search.js *), Bash(node ${CLAUDE_SKILL_DIR}/scripts/kb-get.js *), Bash(node ${CLAUDE_SKILL_DIR}/scripts/kb-save.js *), Bash(node ${CLAUDE_SKILL_DIR}/scripts/kb-build-index.js), Bash(git clone *), Bash(git init *), Bash(mkdir *), AskUserQuestion
 ---
 
 # /kb — git-backed knowledge base
@@ -98,6 +98,21 @@ pull, no file reads. The helper does all of that. Two steps only:
    that IS the entry's primary content. Never substitute a description for the
    URL, and never truncate URLs (no `…`). Present bookmark lists as a flat
    list (not a table) so URLs have room and are copy-pasteable.
+
+### Fetching a known entry by ID
+
+When you already know the entry ID — e.g. following a `links:`/`[[kb-XXXXX]]`
+reference from an entry already in context — fetch it directly instead of
+guessing keywords for `search`:
+
+`node ${CLAUDE_SKILL_DIR}/scripts/kb-get.js kb-0065 kb-0053 ...`
+
+It prints each entry's full body (frontmatter + body + resolved `links:`), in
+the order requested. An unknown ID prints a `NOT FOUND` line and does **not**
+fail the run — the entries that exist are still returned. A `data_dir` `ERROR:`
+means setup is incomplete; stop and point the user to `/kb init`. Prefer this
+over `search` whenever you have the exact ID: search can rank the wrong entry
+first or miss on keywords, but a get by ID is exact.
 
 ---
 

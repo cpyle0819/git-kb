@@ -4,10 +4,8 @@
 // Usage:  node kb-search.js [--type <type>] "term1" "term2" ...
 //   Pass "*" as the sole term to list all (useful with --type).
 
-import { readFileSync, readdirSync, existsSync } from "node:fs";
-import { join } from "node:path";
 import { parseArgs } from "node:util";
-import { getConfigPath, expandHome } from "./shared.js";
+import { resolveDataDir, loadEntries } from "./shared.js";
 
 // ─── Core ────────────────────────────────────────────────────────────────────
 
@@ -27,71 +25,6 @@ const STOP = new Set([
   "with",
   "how",
 ]);
-
-function parseEntry(text) {
-  const m = text.match(/^---\n([\s\S]*?)\n---\n?([\s\S]*)$/);
-  if (!m) return null;
-  const [, fm, body] = m;
-  const get = (k) => {
-    const r = fm.match(new RegExp(`^${k}:[ \\t]*(.*)$`, "m"));
-    return r ? r[1].trim() : "";
-  };
-  const tagsRaw = get("tags");
-  const tags = tagsRaw
-    .replace(/^\[|\]$/g, "")
-    .split(",")
-    .map((s) => s.trim())
-    .filter(Boolean);
-  const links = [...fm.matchAll(/to:[ \t]*(kb-\d+)/g)].map((x) => x[1]);
-  const url = get("url") || null;
-  return {
-    id: get("id"),
-    title: get("title"),
-    type: get("type"),
-    url,
-    tags,
-    links,
-    created: get("created"),
-    updated: get("updated"),
-    body: body.trim(),
-  };
-}
-
-function resolveDataDir() {
-  const configPath = getConfigPath();
-  let dataDir;
-  try {
-    const cfg = JSON.parse(readFileSync(configPath, "utf8"));
-    dataDir = expandHome(cfg.data_dir);
-  } catch {
-    return {
-      error: `ERROR: cannot read ${configPath} (run /kb init to set up the data repo)`,
-      code: 3,
-    };
-  }
-  const entriesDir = join(dataDir, "entries");
-  if (!dataDir || !existsSync(entriesDir)) {
-    return {
-      error: `ERROR: data_dir invalid or has no entries/: '${dataDir}' (run /kb init)`,
-      code: 4,
-    };
-  }
-  return { dataDir, entriesDir };
-}
-
-function loadEntries(entriesDir) {
-  const files = readdirSync(entriesDir).filter((f) => f.endsWith(".md"));
-  const entries = [];
-  const titleById = {};
-  for (const f of files) {
-    const e = parseEntry(readFileSync(join(entriesDir, f), "utf8"));
-    if (!e) continue;
-    e.file = f;
-    entries.push(e);
-    if (e.id) titleById[e.id] = e.title;
-  }
-  return { entries, titleById };
-}
 
 function tokenize(rawTerms) {
   const words = new Set();
