@@ -12,10 +12,14 @@ traversed at search time).
 ## Two layers of access
 
 **Automatic (hook).** A `UserPromptSubmit` hook tokenizes every prompt against a
-keyword index built from entry tags and titles. When 2+ keywords match, the top
-results inject as context before Claude responds. <10ms on non-matching prompts;
-~50–100ms when it fires. Never fires on short or mechanical prompts (commits,
-slash commands, lint fixes). The index rebuilds after every add/edit.
+keyword index built from entry tags and titles. When 2+ keywords match (or a
+cross-cutting signal fires), it injects the matching entries' **ids and titles**
+— not their bodies — with an instruction to fetch the ones the task needs via
+`kb-get`. Claude reads the list and pulls the full text of what's relevant. This
+IDs-only design is deliberate: see [Gotcha: the 10K hook-output
+cap](#gotcha-the-10k-hook-output-cap). <10ms on non-matching prompts; ~50–100ms
+when it fires. Never fires on short or mechanical prompts (commits, slash
+commands, lint fixes). The index rebuilds after every add/edit.
 
 **Intentional (skill).** `/kb search <query>` with full LLM query expansion for
 semantic recall. `/kb add`, `/kb edit` for writes.
@@ -68,11 +72,13 @@ workflows/
 [Two layers of access](#two-layers-of-access). The `/kb` verbs are the only
 part you invoke explicitly; the hook is always-on background context injection.
 
-**Per-session dedup.** When the hook injects an entry, it records the entry ID
-in a per-session ledger under the temp dir, so a later prompt that matches the
-same entry does not re-inject it — each entry lands in a session's context at
-most once. Any add/edit rebuilds the index, which resets the ledger, so new or
-changed entries resurface. A fresh session starts with an empty ledger.
+**Per-session dedup.** When the hook surfaces an entry id, it records that id in
+a per-session ledger under the temp dir, so a later prompt that matches the same
+entry does not list it again — each id appears in a session at most once. Paired
+with the IDs-only design, that bounds the cost of the extra fetch: Claude pulls a
+given entry's body at most once per session, not on every matching prompt. Any
+add/edit rebuilds the index, which resets the ledger, so new or changed entries
+resurface. A fresh session starts with an empty ledger.
 
 ## Testing the skill
 
@@ -106,7 +112,9 @@ friction is the signal for improving SKILL.md and the reference files.
 In `scripts/kb-trigger.js`:
 
 - `THRESHOLD` (default 2) — distinct keyword hits required to fire the keyword path
-- `MAX_CONTEXT_ENTRIES` (default 5) — entries injected per prompt
+- `MAX_CONTEXT_ENTRIES` (default 5) — cap on **keyword-ranked** ids listed per
+  prompt. Cross-cutting ids (always-on + activity-matched) are listed uncapped —
+  the output is ids only, so it can't approach the hook-output cap regardless.
 - `SKIP_PATTERNS` — regex array of prompts that never trigger
 
 In `scripts/shared.js`:
@@ -127,18 +135,49 @@ per session):
   classified activity matches, at zero keyword overlap.
 - `always: true` — inject on every non-skipped prompt.
 
-Cross-cutting entries are ordered ahead of keyword matches so the context cap
-can't starve them. See [`spec/entry-format.md`](spec/entry-format.md) for the
-field contract and when to use each.
+Cross-cutting entries are listed ahead of keyword matches and are not subject to
+`MAX_CONTEXT_ENTRIES`, so keyword noise can't starve them. See
+[`spec/entry-format.md`](spec/entry-format.md) for the field contract and when to
+use each.
+
+## Gotcha: the 10K hook-output cap
+
+Claude Code hard-caps a `UserPromptSubmit` hook's `additionalContext` at **10,000
+characters**. Output over the cap is written to a file in the session directory
+and replaced in-context with a blind ~2KB preview — the harness cuts at a byte
+offset, so whole entries past the cut vanish mid-stream and Claude never sees
+them. The cap is **not configurable**: there is no settings.json key and no
+environment variable for it (`BASH_MAX_OUTPUT_LENGTH` governs Bash tool output,
+not hooks). Confirmed against Claude Code docs, *Hooks → Output size limit and
+truncation*.
+
+**Why this bites the obvious design.** Injecting entry bodies is the tempting
+approach, but a handful of full entries easily exceeds 10K (the writing suite
+alone ran ~26KB). The overflow then truncates to a 2KB preview whose cut point is
+arbitrary — so the entries the classifier ranked *first* can be exactly the ones
+dropped, and silently. The careful cross-cutting-first ordering buys nothing once
+the harness truncates.
+
+**How this hook avoids it.** It injects **ids and titles only**, never bodies,
+and instructs Claude to fetch the entries it needs with `kb-get`. A list of ids
+is a few hundred to ~1–2K chars even with dozens of entries, so it always lands
+intact under the cap. The bodies arrive on demand, in full, un-truncated. Paired
+with per-session dedup, an entry's id is listed at most once per session, so the
+fetch is paid once, not per prompt.
+
+**If you change the hook to emit anything sized with content** (bodies,
+summaries, long headers), keep the assembled `additionalContext` under ~9,000
+chars yourself and degrade the remainder to ids — do not let the harness be the
+thing that truncates, because its cut is blind and silent.
 
 ### Observability
 
 Set `KB_HOOK_DEBUG=1` to append a per-prompt JSONL record to
-`<tmpdir>/kb-hook-cache/debug.jsonl`: keyword hits, detected activities, injected
+`<tmpdir>/kb-hook-cache/debug.jsonl`: keyword hits, detected activities, surfaced
 ids (with which signal surfaced each), and near-misses — keyword hits below
-`THRESHOLD` and relevant entries cut by the per-prompt cap. This makes a
-non-surfaced entry observable instead of silent, so retrieval quality can be
-measured. Off by default; the non-match path stays a pure in-memory index lookup.
+`THRESHOLD`, and the reason nothing surfaced (`no_signal` / `all_deduped`). This
+makes a non-surfaced entry observable instead of silent, so retrieval quality can
+be measured. Off by default; the non-match path stays a pure in-memory index lookup.
 
 ## Trade-offs
 

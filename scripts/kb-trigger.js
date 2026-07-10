@@ -272,17 +272,30 @@ const keywordResults = keywordFires
   ? runSearch([...hitKeywords].slice(0, 6)).map((r) => ({ ...r, via: "keyword" }))
   : [];
 
-// Merge, cross-cutting first, dropping keyword duplicates of a cross entry.
+// Keyword hits that duplicate a cross-cutting entry are dropped below.
 const crossSeen = new Set(crossResults.map((r) => r.id));
-const merged = [...crossResults, ...keywordResults.filter((r) => !crossSeen.has(r.id))];
 
-// Drop entries already injected this session (dedup by entry ID), then cap.
+// ─── IDs-only injection ─────────────────────────────────────────────────────
+// We inject entry IDS + titles, never the entry bodies. Claude Code hard-caps a
+// hook's additionalContext at 10,000 chars (over-cap output is written to a file
+// and replaced in-context with a blind ~2KB preview that silently truncates whole
+// entries mid-stream — see README "Gotcha: the 10K hook-output cap"). A list of
+// ids can never approach that cap, so everything the hook surfaces reaches the
+// model intact. The model fetches the bodies it needs with kb-get. Per-session
+// dedup makes that at most one fetch per entry per session: an id surfaced once is
+// not listed again, so the extra fetch is paid once, not every prompt.
+//
+// Because ids are tiny, cross-cutting guidance (always-on + activity-matched) is
+// listed IN FULL and uncapped — it can't be starved by keyword noise. Only the
+// keyword-ranked hits are capped, to keep the list signal-dense.
 const ledger = loadLedger(sessionId, stamp);
-const fresh = merged.filter((r) => !ledger.seen.has(r.id));
-const selected = fresh.slice(0, MAX_CONTEXT_ENTRIES);
-const dropped = fresh.slice(MAX_CONTEXT_ENTRIES); // over the cap this prompt
+const freshCross = crossResults.filter((r) => !ledger.seen.has(r.id));
+const freshKeyword = keywordResults
+  .filter((r) => !crossSeen.has(r.id) && !ledger.seen.has(r.id))
+  .slice(0, MAX_CONTEXT_ENTRIES);
 
-if (selected.length === 0) {
+const surfaced = [...freshCross, ...freshKeyword];
+if (surfaced.length === 0) {
   debugLog({
     session: sessionId,
     prompt: prompt.slice(0, 200),
@@ -292,21 +305,20 @@ if (selected.length === 0) {
     activities: [...activities],
     cross_ids: crossIds,
   });
-  process.exit(0); // all matches already in context this session
+  process.exit(0); // all matches already surfaced this session
 }
 
-for (const r of selected) ledger.seen.add(r.id);
+// An id surfaced this prompt is marked seen, so it is never re-listed this session.
+for (const r of surfaced) ledger.seen.add(r.id);
 saveLedger(sessionId, ledger.seen, stamp);
 
 debugLog({
   session: sessionId,
   prompt: prompt.slice(0, 200),
-  injected: selected.map((r) => ({ id: r.id, via: r.via })),
+  injected: surfaced.map((r) => ({ id: r.id, via: r.via })),
   keywords: [...hitKeywords],
   activities: [...activities],
   cross_ids: crossIds,
-  // Near-miss: relevant entries cut by the per-prompt cap.
-  dropped_over_cap: dropped.map((r) => ({ id: r.id, via: r.via })),
 });
 
 // Header names both signals so the reason an entry surfaced is legible.
@@ -315,11 +327,21 @@ if (hitKeywords.size) matchBits.push(`keywords: ${[...hitKeywords].join(", ")}`)
 if (activities.size) matchBits.push(`activity: ${[...activities].join(", ")}`);
 if (alwaysIds.length) matchBits.push("always-on");
 
-const body = selected.map((r) => r.render).join("\n\n");
+// First render line is "### <id> — <title>"; strip the leading "### " so each
+// bullet reads "kb-0066 — Acceptance criteria guidance" (id already included).
+const labelOf = (r) => (r.render.split("\n", 1)[0] || r.id).replace(/^#+\s*/, "");
+const list = surfaced.map((r) => `- ${labelOf(r)}`).join("\n");
+
 const output = {
   hookSpecificOutput: {
     hookEventName: "UserPromptSubmit",
-    additionalContext: `[KB auto-lookup — ${matchBits.join("; ")}]\n\n${body}`,
+    additionalContext:
+      `[KB auto-lookup — ${matchBits.join("; ")}]\n\n` +
+      `Relevant KB entries (titles only). Before relying on any of these, fetch its full ` +
+      `body once with:\n` +
+      `  node ~/.claude/skills/git-kb/scripts/kb-get.js <id> [<id> ...]\n` +
+      `Each is listed at most once per session; fetch the ones this task needs.\n\n` +
+      list,
   },
 };
 
