@@ -337,10 +337,12 @@ const output = {
     hookEventName: "UserPromptSubmit",
     additionalContext:
       `[KB auto-lookup — ${matchBits.join("; ")}]\n\n` +
-      `Relevant KB entries (titles only). Before relying on any of these, fetch its full ` +
-      `body once with:\n` +
+      `Relevant KB entries (titles only — the title is NOT the guidance). You MUST ` +
+      `fetch the full body of each entry relevant to this task and work from it ` +
+      `before acting; do not rely on the title or your memory of the entry:\n` +
       `  node ~/.claude/skills/git-kb/scripts/kb-get.js <id> [<id> ...]\n` +
-      `Each is listed at most once per session; fetch the ones this task needs.\n\n` +
+      `(Batch the ids into one call.) Each id is listed at most once per session, so ` +
+      `fetch it now — it will not be re-listed on later prompts.\n\n` +
       list,
   },
 };
