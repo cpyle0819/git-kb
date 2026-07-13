@@ -1,6 +1,6 @@
 # KB Entry Format Spec (v1)
 
-The contract every entry file obeys. Both `/kb add` (writes it) and `/kb search`
+The contract every entry file obeys. Both `/git-kb add` (writes it) and `/git-kb search`
 (reads it) depend on this. Designed to be parseable by plain tools (`git grep`,
 `grep`, any YAML reader) and by eye — no custom format, no binary.
 
@@ -23,7 +23,7 @@ content is sensitive) contains only entries and a tiny manifest:
 ```
 
 No code, no index, no embeddings. The `kb-system` repo (this one) holds the
-`/kb` command, this spec, and any helper scripts — and points at a data repo via
+`/git-kb` command, this spec, and any helper scripts — and points at a data repo via
 a configurable remote (see SKILL). Sharing the system never shares the data.
 
 ## File naming
@@ -162,7 +162,7 @@ Extend the set only by editing this spec.
 ```
 
 - `schema_version` — bump when this spec changes incompatibly.
-- `next_id` — the counter `/kb add` reads, uses, and increments (in the same
+- `next_id` — the counter `/git-kb add` reads, uses, and increments (in the same
   commit as the new entry) so ids never collide.
 
 ## Invariants (what `search`/lint can assume)

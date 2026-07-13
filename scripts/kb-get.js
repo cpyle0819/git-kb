@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// kb-get.js — fetch KB entries by ID and print them verbatim, for the /kb skill
+// kb-get.js — fetch KB entries by ID and print them verbatim, for the /git-kb skill
 // and for following [[kb-XXXXX]] links without round-tripping through search.
 //
 // Usage:  node kb-get.js [--jsonl] kb-0065 kb-0053 ...

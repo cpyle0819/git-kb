@@ -120,14 +120,14 @@ export function resolveDataDir() {
     dataDir = expandHome(cfg.data_dir);
   } catch {
     return {
-      error: `ERROR: cannot read ${configPath} (run /kb init to set up the data repo)`,
+      error: `ERROR: cannot read ${configPath} (run /git-kb init to set up the data repo)`,
       code: 3,
     };
   }
   const entriesDir = join(dataDir, "entries");
   if (!dataDir || !existsSync(entriesDir)) {
     return {
-      error: `ERROR: data_dir invalid or has no entries/: '${dataDir}' (run /kb init)`,
+      error: `ERROR: data_dir invalid or has no entries/: '${dataDir}' (run /git-kb init)`,
       code: 4,
     };
   }

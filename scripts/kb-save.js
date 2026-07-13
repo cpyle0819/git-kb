@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// kb-save.js — write/update + commit + push one KB entry, for the /kb skill.
+// kb-save.js — write/update + commit + push one KB entry, for the /git-kb skill.
 //
 // Add mode:   node kb-save.js --slug "<slug>" < entry.md
 //   stdin must contain `id: __ID__`; assigns a collision-free id, bumps kb.json.
@@ -60,7 +60,7 @@ function resolveDataDir() {
     dataDir = expandHome(cfg.data_dir);
   } catch {
     return {
-      error: `ERROR: cannot read ${configPath} (run /kb init to set up the data repo)`,
+      error: `ERROR: cannot read ${configPath} (run /git-kb init to set up the data repo)`,
       code: 3,
     };
   }
@@ -68,13 +68,13 @@ function resolveDataDir() {
   const manifest = join(dataDir, "kb.json");
   if (!existsSync(join(dataDir, ".git"))) {
     return {
-      error: `ERROR: data_dir is not a git repo: '${dataDir}' (run /kb init)`,
+      error: `ERROR: data_dir is not a git repo: '${dataDir}' (run /git-kb init)`,
       code: 4,
     };
   }
   if (!existsSync(entriesDir) || !existsSync(manifest)) {
     return {
-      error: `ERROR: data_dir invalid (no entries/ or kb.json): '${dataDir}' (run /kb init)`,
+      error: `ERROR: data_dir invalid (no entries/ or kb.json): '${dataDir}' (run /git-kb init)`,
       code: 4,
     };
   }

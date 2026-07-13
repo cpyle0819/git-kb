@@ -1,4 +1,4 @@
-# kb
+# git-kb
 
 A Claude Code plugin for maintaining a personal knowledge base in plain markdown
 and git. Entries live in a separate private `kb-data` repo; this repo is the
@@ -21,16 +21,16 @@ cap](#gotcha-the-10k-hook-output-cap). <10ms on non-matching prompts; ~50–100m
 when it fires. Never fires on short or mechanical prompts (commits, slash
 commands, lint fixes). The index rebuilds after every add/edit.
 
-**Intentional (skill).** `/kb search <query>` with full LLM query expansion for
-semantic recall. `/kb add`, `/kb edit` for writes.
+**Intentional (skill).** `/git-kb search <query>` with full LLM query expansion for
+semantic recall. `/git-kb add`, `/git-kb edit` for writes.
 
 ## Install
 
 ```
-ln -s "$PWD" ~/.claude/skills/kb
+ln -s "$PWD" ~/.claude/skills/git-kb
 ```
 
-Then `/kb init` — it asks for the `kb-data` repo (clone URL, existing local
+Then `/git-kb init` — it asks for the `kb-data` repo (clone URL, existing local
 clone, or new), builds the keyword index, and you're done. The plugin manifest
 (`.claude-plugin/plugin.json`) makes Claude Code discover the hook on next
 session start without any settings.json edits.
@@ -40,7 +40,7 @@ session start without any settings.json edits.
 ```
 .claude-plugin/plugin.json   plugin manifest (hook auto-discovery)
 hooks/hooks.json             UserPromptSubmit → kb-trigger.js
-SKILL.md                     /kb skill: dispatch + inline search + rules
+SKILL.md                     /git-kb skill: dispatch + inline search + rules
 references/
   writing.md                 add + edit detail (loaded on those verbs)
   init.md                     setup detail (loaded on init)
@@ -53,23 +53,23 @@ scripts/
   kb-save.js                 validate + write + commit + push + rebuild index
   shared.js                  config resolution + entry parse/load helpers
 workflows/
-  test-skill.js              /kb:test-skill — fresh-eyes test harness (see below)
+  test-skill.js              /git-kb:test-skill — fresh-eyes test harness (see below)
 ```
 
 ## Usage
 
 | Command | Effect |
 |---|---|
-| `/kb init` | One-time setup: wire data repo, build index |
-| `/kb add <knowledge>` | Draft + save + commit + push an entry |
-| `/kb search <query>` | Ranked search with query expansion |
+| `/git-kb init` | One-time setup: wire data repo, build index |
+| `/git-kb add <knowledge>` | Draft + save + commit + push an entry |
+| `/git-kb search <query>` | Ranked search with query expansion |
 | `kb-get.js <id>…` | Fetch known entries by ID verbatim (follow `[[kb-XXXXX]]` links) |
-| `/kb edit <id or desc> <change>` | Modify an entry in place |
-| `/kb:test-skill` | Fresh-eyes test of the skill (see below) |
+| `/git-kb edit <id or desc> <change>` | Modify an entry in place |
+| `/git-kb:test-skill` | Fresh-eyes test of the skill (see below) |
 
-**Automatic retrieval has no command.** Once `/kb init` has run, the
+**Automatic retrieval has no command.** Once `/git-kb init` has run, the
 `UserPromptSubmit` hook fires on every prompt with no action from you — see
-[Two layers of access](#two-layers-of-access). The `/kb` verbs are the only
+[Two layers of access](#two-layers-of-access). The `/git-kb` verbs are the only
 part you invoke explicitly; the hook is always-on background context injection.
 
 **Per-session dedup.** When the hook surfaces an entry id, it records that id in
@@ -82,7 +82,7 @@ resurface. A fresh session starts with an empty ledger.
 
 ## Testing the skill
 
-`/kb:test-skill` runs an isolated, self-verifying test of the whole skill. It:
+`/git-kb:test-skill` runs an isolated, self-verifying test of the whole skill. It:
 
 1. **Setup** — creates a throwaway scratch kb-data repo in a temp dir (via
    `mktemp`) with a temp `CLAUDE_PLUGIN_DATA` config and three seeded entries.

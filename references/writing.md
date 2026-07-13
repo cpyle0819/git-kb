@@ -119,7 +119,7 @@ thesis, separate entries for distinct findings, joined with `part_of` /
    validates (closed enums, no dangling links), writes the file, bumps
    `kb.json`, commits, and pushes. It prints `SAVED kb-NNNN ...` with a `push:`
    line. If it prints an `ERROR:` line, fix the entry and retry; if the error is
-   about `data_dir`, stop and point the user to `/kb init`.
+   about `data_dir`, stop and point the user to `/git-kb init`.
 
    **Splitting into multiple entries:** the helper assigns each id at save time,
    so you can't reference a sibling's id before it exists. Save the **anchor**

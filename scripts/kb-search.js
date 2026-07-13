@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// kb-search.js — lexical search over the kb-data repo, for the /kb skill.
+// kb-search.js — lexical search over the kb-data repo, for the /git-kb skill.
 //
 // Usage:  node kb-search.js [--type <type>] "term1" "term2" ...
 //   Pass "*" as the sole term to list all (useful with --type).

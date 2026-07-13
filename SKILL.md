@@ -1,5 +1,5 @@
 ---
-name: kb
+name: git-kb
 description: Automatic knowledge-base (kb) retrieval for every prompt. Uses keywords to keep the user's session hydrated with appropriate context.
 argument-hint: <verb> <content> # verb = init|add|search|edit
 model: sonnet
@@ -7,7 +7,7 @@ effort: low
 allowed-tools: Read, Write(${CLAUDE_PLUGIN_DATA}/kb-config.json), Bash(node ${CLAUDE_SKILL_DIR}/scripts/kb-search.js *), Bash(node ${CLAUDE_SKILL_DIR}/scripts/kb-get.js *), Bash(node ${CLAUDE_SKILL_DIR}/scripts/kb-save.js *), Bash(node ${CLAUDE_SKILL_DIR}/scripts/kb-build-index.js), Bash(git clone *), Bash(git init *), Bash(mkdir *), AskUserQuestion
 ---
 
-# /kb — git-backed knowledge base
+# /git-kb — git-backed knowledge base
 
 You are operating the user's personal knowledge base. It is a **git repo of
 markdown entries** (the `kb-data` repo). There is no database and no server —
@@ -30,7 +30,7 @@ git is the persistence layer and the markdown files are the source of truth.
    e.g. writing rules on any authoring prompt) — so guidance surfaces even when
    the prompt names none of its keywords. Set these when drafting via `add`/`edit`
    (see `references/writing.md`); both respect the per-session dedup.
-2. **The `/kb` verbs (below).** Explicit `init` / `add` / `search` / `edit`.
+2. **The `/git-kb` verbs (below).** Explicit `init` / `add` / `search` / `edit`.
 
 ## Dispatch first — do only what the verb needs
 
@@ -64,9 +64,9 @@ yourself — the helpers resolve the config path on their own, which is why
 
 **Not configured yet?** `search`/`add`/`edit` each run a helper that resolves
 `data_dir` itself. If a helper exits with a `data_dir` `ERROR:` (config missing,
-path absent, or not a valid repo), stop and point the user to `/kb init`:
+path absent, or not a valid repo), stop and point the user to `/git-kb init`:
 
-> KB isn't set up yet. Run `/kb init` to point it at your kb-data repo
+> KB isn't set up yet. Run `/git-kb init` to point it at your kb-data repo
 > (clone URL, an existing local clone, or a new repo).
 
 ---
@@ -94,7 +94,7 @@ pull, no file reads. The helper does all of that. Two steps only:
    field is omitted, not printed empty) — a missing `links:` line means the entry
    genuinely has none, not that the field was dropped. Special outputs: `NO_MATCHES` (nothing matched) or a line starting
    `ERROR:` — a `data_dir` `ERROR:` means setup is incomplete; stop and point
-   the user to `/kb init`.
+   the user to `/git-kb init`.
 2. Answer the user's question directly from the returned content (the top hits'
    full bodies are already present — do NOT read files again). Then, if useful,
    mention the resolved `links:` as related entries to explore. Only read a full
@@ -115,7 +115,7 @@ guessing keywords for `search`:
 It prints each entry's full body (frontmatter + body + resolved `links:`), in
 the order requested. An unknown ID prints a `NOT FOUND` line and does **not**
 fail the run — the entries that exist are still returned. A `data_dir` `ERROR:`
-means setup is incomplete; stop and point the user to `/kb init`. Prefer this
+means setup is incomplete; stop and point the user to `/git-kb init`. Prefer this
 over `search` whenever you have the exact ID: search can rank the wrong entry
 first or miss on keywords, but a get by ID is exact.
 

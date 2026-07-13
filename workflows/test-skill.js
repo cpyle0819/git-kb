@@ -1,6 +1,6 @@
 export const meta = {
   name: 'test-skill',
-  description: 'Fresh-eyes test of the /kb skill. Spins up isolated scratch KB, has fresh agents exercise init/add/edit/search + the auto-trigger hook the way a user would, adversarially verifies the outcomes against the scratch repo, and reports pass/fail plus doc-followability friction. Safe: never touches the real KB or its remote.',
+  description: 'Fresh-eyes test of the /git-kb skill. Spins up isolated scratch KB, has fresh agents exercise init/add/edit/search + the auto-trigger hook the way a user would, adversarially verifies the outcomes against the scratch repo, and reports pass/fail plus doc-followability friction. Safe: never touches the real KB or its remote.',
   phases: [
     { title: 'Setup', detail: 'mktemp an isolated scratch KB + config, seed known entries, build index' },
     { title: 'Exercise', detail: 'One fresh writer + one fresh reader perform user tasks by following the skill docs' },
@@ -131,7 +131,7 @@ const READ_TESTS = [
 // ─── Prompt builders ─────────────────────────────────────────────────────────
 
 const harnessPreamble = (env) => `
-You are a FRESH user of the \`/kb\` skill — you have no memory of how it was built.
+You are a FRESH user of the \`/git-kb\` skill — you have no memory of how it was built.
 Learn it only from its docs, then use it to accomplish the tasks below.
 
 Test-harness environment (this is NOT the real KB — it is a disposable scratch copy):
