@@ -339,8 +339,9 @@ const output = {
       `[KB auto-lookup — ${matchBits.join("; ")}]\n\n` +
       `Relevant KB entries (titles only — the title is NOT the guidance). You MUST ` +
       `fetch the full body of each entry relevant to this task and work from it ` +
-      `before acting; do not rely on the title or your memory of the entry:\n` +
-      `  node ~/.claude/skills/git-kb/scripts/kb-get.js <id> [<id> ...]\n` +
+      `before acting; do not rely on the title or your memory of the entry. Fetch ` +
+      `via the Skill tool, not a raw Bash call, so the fetch runs pre-approved:\n` +
+      `  Skill(skill: "git-kb", args: "get <id> [<id> ...]")\n` +
       `(Batch the ids into one call.) Each id is listed at most once per session, so ` +
       `fetch it now — it will not be re-listed on later prompts.\n\n` +
       list,

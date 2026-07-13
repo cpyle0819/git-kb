@@ -1,7 +1,7 @@
 ---
 name: git-kb
 description: Automatic knowledge-base (kb) retrieval for every prompt. Uses keywords to keep the user's session hydrated with appropriate context.
-argument-hint: <verb> <content> # verb = init|add|search|edit
+argument-hint: <verb> <content> # verb = init|add|search|edit|get
 model: sonnet
 effort: low
 allowed-tools: Read, Write(${CLAUDE_PLUGIN_DATA}/kb-config.json), Bash(node ${CLAUDE_SKILL_DIR}/scripts/kb-search.js *), Bash(node ${CLAUDE_SKILL_DIR}/scripts/kb-get.js *), Bash(node ${CLAUDE_SKILL_DIR}/scripts/kb-save.js *), Bash(node ${CLAUDE_SKILL_DIR}/scripts/kb-build-index.js), Bash(git clone *), Bash(git init *), Bash(mkdir *), AskUserQuestion
@@ -30,18 +30,34 @@ git is the persistence layer and the markdown files are the source of truth.
    e.g. writing rules on any authoring prompt) — so guidance surfaces even when
    the prompt names none of its keywords. Set these when drafting via `add`/`edit`
    (see `references/writing.md`); both respect the per-session dedup.
-2. **The `/git-kb` verbs (below).** Explicit `init` / `add` / `search` / `edit`.
+2. **The `/git-kb` verbs (below).** Explicit `init` / `add` / `search` / `edit` /
+   `get`.
+
+## Invoke via the Skill tool, not raw Bash — this is how permissions stay scoped
+
+`allowed-tools` above pre-approves the `kb-*.js` scripts **only while this
+skill is the active context**. That scope applies when the skill is entered
+through the `Skill` tool (which is what the `/git-kb` slash command does under
+the hood) — not when a script is called from a bare `Bash` call made outside
+it. Concretely: whenever you (or another skill, or a hook-injected instruction)
+need a KB operation and the user did not type `/git-kb` themselves, invoke
+`Skill(skill: "git-kb", args: "<verb> <payload>")` yourself rather than
+shelling out to a `kb-*.js` script directly — that is the only path that
+carries the pre-approved scope, so it's the difference between a silent fetch
+and a permission prompt on every single lookup.
 
 ## Dispatch first — do only what the verb needs
 
-The first token of `$ARGUMENTS` is the verb: `init`, `add`, `search`, or
-`edit`; the payload is what remains. If the verb is none of these, tell the
+The first token of `$ARGUMENTS` is the verb: `init`, `add`, `search`, `edit`, or
+`get`; the payload is what remains. If the verb is none of these, tell the
 user the valid verbs and stop (no natural-language fallback in v1).
 
 **Do NOT do any setup up front.** Each verb does exactly the setup it needs:
 
 - **`search`** — recall knowledge. Needs nothing first; the helper resolves and
   validates `data_dir` itself. Handled inline below.
+- **`get`** — fetch one or more already-known entries by id. Needs nothing
+  first. Handled inline below.
 - **`add`** — capture knowledge. Read [`references/writing.md`](references/writing.md)
   and follow the `add` section.
 - **`edit`** — change an existing entry in place (factual corrections /
@@ -62,7 +78,7 @@ they fall back to `~/.claude/kb-config.json`. You never set this variable
 yourself — the helpers resolve the config path on their own, which is why
 `search`/`add`/`edit` need no config read before invoking them.
 
-**Not configured yet?** `search`/`add`/`edit` each run a helper that resolves
+**Not configured yet?** `search`/`get`/`add`/`edit` each run a helper that resolves
 `data_dir` itself. If a helper exits with a `data_dir` `ERROR:` (config missing,
 path absent, or not a valid repo), stop and point the user to `/git-kb init`:
 
@@ -104,11 +120,14 @@ pull, no file reads. The helper does all of that. Two steps only:
    URL, and never truncate URLs (no `…`). Present bookmark lists as a flat
    list (not a table) so URLs have room and are copy-pasteable.
 
-### Fetching a known entry by ID
+---
 
-When you already know the entry ID — e.g. following a `links:`/`[[kb-XXXXX]]`
-reference from an entry already in context — fetch it directly instead of
-guessing keywords for `search`:
+## get — fetch known entries by id
+
+Payload: one or more `kb-NNNN` ids. Use this whenever you already know the
+id — e.g. following a `links:`/`[[kb-XXXXX]]` reference from an entry already
+in context, or a hook-injected list of ids — instead of guessing keywords for
+`search`. **Do no setup** — the helper resolves `data_dir` itself.
 
 `node ${CLAUDE_SKILL_DIR}/scripts/kb-get.js kb-0065 kb-0053 ...`
 
