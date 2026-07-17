@@ -4,7 +4,7 @@ description: Automatic knowledge-base (kb) retrieval for every prompt. Uses keyw
 argument-hint: <verb> <content> # verb = init|add|search|edit|get
 model: sonnet
 effort: low
-allowed-tools: Read, Write(${CLAUDE_PLUGIN_DATA}/kb-config.json), Bash(node ${CLAUDE_SKILL_DIR}/scripts/kb-search.js *), Bash(node ${CLAUDE_SKILL_DIR}/scripts/kb-get.js *), Bash(node ${CLAUDE_SKILL_DIR}/scripts/kb-save.js *), Bash(node ${CLAUDE_SKILL_DIR}/scripts/kb-build-index.js), Bash(git clone *), Bash(git init *), Bash(mkdir *), AskUserQuestion
+allowed-tools: Read, Write(${CLAUDE_PLUGIN_DATA}/kb-config.json), Write(*/entries/*.md), Edit(*/entries/*.md), Bash(node ${CLAUDE_SKILL_DIR}/scripts/kb-search.js *), Bash(node ${CLAUDE_SKILL_DIR}/scripts/kb-get.js *), Bash(node ${CLAUDE_SKILL_DIR}/scripts/kb-save.js *), Bash(node ${CLAUDE_SKILL_DIR}/scripts/kb-build-index.js), Bash(git clone *), Bash(git init *), Bash(mkdir *), AskUserQuestion
 ---
 
 # /git-kb — git-backed knowledge base

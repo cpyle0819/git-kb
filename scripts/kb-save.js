@@ -1,14 +1,28 @@
 #!/usr/bin/env node
-// kb-save.js — write/update + commit + push one KB entry, for the /git-kb skill.
+// kb-save.js — commit + push a KB entry, for the /git-kb skill.
 //
-// Add mode:   node kb-save.js --slug "<slug>" < entry.md
-//   stdin must contain `id: __ID__`; assigns a collision-free id, bumps kb.json.
+// The entry content comes from a file on disk (--file, the primary path — you
+// Write/Edit the file with your normal tools, then hand its path here) or from
+// stdin (the fallback, for piping a program's output straight in).
 //
-// Edit mode:  node kb-save.js --edit kb-NNNN [--slug "<new-slug>"] < entry.md
-//   stdin must contain the real `id: kb-NNNN`. Overwrites in place (no new id).
+// Add mode:   node kb-save.js --slug "<slug>" --file entries/<draft>.md
+//             node kb-save.js --slug "<slug>" < entry.md          (stdin fallback)
+//   content must contain `id: __ID__`; assigns a collision-free id, bumps
+//   kb.json, and (for --file) renames the draft to entries/kb-NNNN-<slug>.md.
+//
+// Edit mode:  node kb-save.js --edit kb-NNNN [--slug "<new-slug>"] [--file <path>]
+//             node kb-save.js --edit kb-NNNN [--slug "<new-slug>"] < entry.md
+//   content must contain the real `id: kb-NNNN`. With no --file and no stdin,
+//   commits the entry file already edited in place on disk. Overwrites, no new id.
 
-import { readFileSync, readdirSync, existsSync, writeFileSync } from "node:fs";
-import { join, dirname } from "node:path";
+import {
+  readFileSync,
+  readdirSync,
+  existsSync,
+  writeFileSync,
+  unlinkSync,
+} from "node:fs";
+import { join, dirname, resolve, basename } from "node:path";
 import { execFileSync } from "node:child_process";
 import { parseArgs } from "node:util";
 import { fileURLToPath } from "node:url";
@@ -195,7 +209,10 @@ function setRemote(dataDir, url) {
   return { status: "remote_set", url, branch };
 }
 
-function save(content, { slug, editId, dataDir, entriesDir, manifest }) {
+function save(
+  content,
+  { slug, editId, sourcePath, dataDir, entriesDir, manifest },
+) {
   const editMode = editId !== null;
   const fileById = mapExistingEntries(entriesDir);
   const existing = new Set(Object.keys(fileById));
@@ -231,16 +248,29 @@ function save(content, { slug, editId, dataDir, entriesDir, manifest }) {
   const { title, errors } = validate(fm, id, existing);
   if (errors.length > 0) return { error: `ERROR: ${errors[0]}`, code: 5 };
 
-  // Write
+  // Write. The target filename is the id + slug; the source content may have
+  // arrived from a differently-named draft file (add via --file), the existing
+  // entry file (edit in place), or stdin (no source file).
   const oldFile = fileById[id];
   const file = slug ? `${id}-${slug}.md` : (oldFile ?? `${id}.md`);
+  const targetAbs = join(entriesDir, file);
+  // Rename the tracked entry file when an edit changes its slug.
   if (editMode && oldFile && oldFile !== file) {
     git(dataDir, ["mv", `entries/${oldFile}`, `entries/${file}`]);
   }
-  writeFileSync(
-    join(entriesDir, file),
-    final.endsWith("\n") ? final : final + "\n",
-  );
+  writeFileSync(targetAbs, final.endsWith("\n") ? final : final + "\n");
+  // A draft written under a non-target name (add via --file) leaves a stray
+  // file once its content lands at the id-based path — remove it so the add
+  // doesn't commit both the draft and the final entry.
+  if (sourcePath && resolve(sourcePath) !== resolve(targetAbs)) {
+    const srcAbs = resolve(sourcePath);
+    if (srcAbs.startsWith(resolve(entriesDir) + "/") && existsSync(srcAbs)) {
+      unlinkSync(srcAbs);
+      // Stage the removal only if the draft was tracked; a freshly-written
+      // untracked draft needs no git action (and `git add` would error on it).
+      gitTry(dataDir, ["add", "-A", "--", `entries/${basename(srcAbs)}`]);
+    }
+  }
   const toAdd = [`entries/${file}`];
   if (!editMode) {
     writeFileSync(manifest, JSON.stringify(kb, null, 2) + "\n");
@@ -309,6 +339,7 @@ const { values } = parseArgs({
   options: {
     slug: { type: "string" },
     edit: { type: "string" },
+    file: { type: "string" },
     "set-remote": { type: "string" },
   },
   strict: false,
@@ -340,13 +371,49 @@ let slug = (values.slug ?? "")
   .replace(/^-|-$/g, "");
 if (!editMode && !slug) die("ERROR: missing --slug", 2);
 
-const content = readFileSync(0, "utf8");
-if (editMode) {
-  if (!new RegExp(`^id:\\s*${editId}\\s*$`, "m").test(content)) {
-    die(`ERROR: stdin frontmatter id must be '${editId}' in edit mode`, 2);
+// Resolve the entry content and its source file, if any. Precedence:
+//   1. --file <path>       — read the named file (primary path).
+//   2. stdin (piped)       — read stdin (fallback, for piping program output).
+//   3. edit-in-place       — no --file, no stdin: commit the entry file already
+//                            edited on disk (edit mode only).
+const fileArg = values.file ?? null;
+// Empty stdin (a TTY, or a redirect like `< /dev/null`) reads as "" — treat that
+// as no stdin so edit-in-place fires regardless of how stdin is wired.
+let stdinContent = "";
+if (!fileArg) {
+  try {
+    stdinContent = readFileSync(0, "utf8");
+  } catch {
+    stdinContent = "";
   }
-} else if (!/^id:\s*__ID__\s*$/m.test(content)) {
-  die("ERROR: stdin frontmatter must contain `id: __ID__`", 2);
+}
+const hasStdin = stdinContent.trim().length > 0;
+let content;
+let sourcePath = null;
+if (fileArg) {
+  const p = resolve(fileArg);
+  if (!existsSync(p)) die(`ERROR: --file not found: '${fileArg}'`, 2);
+  content = readFileSync(p, "utf8");
+  sourcePath = p;
+} else if (hasStdin) {
+  content = stdinContent;
+} else if (editMode) {
+  // Edit-in-place: locate the existing entry file on disk and commit it as-is.
+  const fileById = mapExistingEntries(resolved.entriesDir);
+  const existingFile = fileById[editId];
+  if (!existingFile)
+    die(`ERROR: ${editId} does not exist — nothing to edit`, 5);
+  sourcePath = join(resolved.entriesDir, existingFile);
+  content = readFileSync(sourcePath, "utf8");
+} else {
+  die("ERROR: add mode needs entry content via --file <path> or stdin", 2);
+}
+
+const idPattern = editMode ? `id:\\s*${editId}\\s*$` : "id:\\s*__ID__\\s*$";
+const idLabel = editMode ? `id: ${editId}` : "id: __ID__";
+if (!new RegExp(`^${idPattern}`, "m").test(content)) {
+  const src = fileArg ? `--file` : sourcePath ? `entry file` : "stdin";
+  die(`ERROR: ${src} frontmatter must contain \`${idLabel}\``, 2);
 }
 
 const pullResult = pull(resolved.dataDir);
@@ -355,6 +422,7 @@ if (pullResult.error) die(pullResult.error, pullResult.code);
 const result = save(content, {
   slug,
   editId,
+  sourcePath,
   dataDir: resolved.dataDir,
   entriesDir: resolved.entriesDir,
   manifest: resolved.manifest,

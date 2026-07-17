@@ -1,18 +1,34 @@
 # Writing to the KB — `add` and `edit`
 
-Both verbs draft a markdown entry and hand it to `kb-save.js`, which does ALL the
-mechanical work (pull, id assignment, write, manifest bump, commit, push,
-validation) in one allowlisted call. You draft + review; the helper does the rest.
+You author the entry with your normal file tools — `Write` a new entry, `Edit` an
+existing one in place — then hand it to `kb-save.js`, which does the mechanical git
+work (pull, id assignment, manifest bump, validation, commit, push, index rebuild)
+in one allowlisted call. **`add` uses `Write`; `edit` uses `Edit`.** You author +
+review the file; the helper does the git plumbing.
+
+The helper takes the entry content from one of three sources, in this precedence:
+
+1. **`--file <path>`** — the file you just `Write`/`Edit`-ed. This is the primary
+   path: `node ${CLAUDE_SKILL_DIR}/scripts/kb-save.js --file entries/<name>.md ...`.
+2. **Edit-in-place** (edit mode only) — with **no `--file` and empty stdin**, the
+   helper commits the entry file you already edited on disk. Since `search`/`get`
+   print the entry's `file: entries/kb-NNNN-*.md` path, you can `Edit` that file
+   directly and call `--edit kb-NNNN` with nothing piped.
+3. **stdin (heredoc)** — the fallback, for piping a program's output straight in
+   (e.g. `some-extractor | node kb-save.js --slug ...`). Empty stdin (a TTY or
+   `< /dev/null`) does NOT count as stdin content.
 
 ## Gotchas (read before saving)
 
-- **Heredoc must start with `node`** — the allowed-tools pattern is `Bash(node ${CLAUDE_SKILL_DIR}/scripts/kb-save.js *)`. Using `cat entry.md | node kb-save.js` won't match and the call will be blocked.
+- **Command must start with `node`** — the allowed-tools pattern is `Bash(node ${CLAUDE_SKILL_DIR}/scripts/kb-save.js *)`. Using `cat entry.md | node kb-save.js` won't match and the call will be blocked; pass `--file` (or a bare heredoc that begins with `node`) instead.
+- **`add` = `Write`, `edit` = `Edit`.** For a new entry, `Write` the draft file then `--file` it. For a change, `Edit` the existing entry file surgically then `--edit kb-NNNN` (no need to reproduce the whole entry). Don't hand-build the full entry text just to pipe it — use the file tools.
 - **Check for `SAVED`/`EDITED`, not just absence of `ERROR:`** — kb-save.js also exits 0 on `NO_CHANGES` (identical content after pull). This is not an error; it commonly means a prior save already succeeded.
 - **Pull failure = hard abort** — if `git pull` fails (network/auth/diverged), kb-save.js exits 6 with `ERROR: git pull failed — refusing to write against a stale DB.` The commit never happens. Fix connectivity before retrying.
 - **Merge conflict after pull** — prints `ERROR: git pull left a merge conflict.` (code 6). Don't retry blindly — the user must resolve it in the data repo first.
 - **Local commit without push** — `push:` line says `committed locally but NOT pushed`. The entry IS saved. Don't re-run kb-save.js (it will find NO_CHANGES and obscure the local-only state). Relay the message and suggest retrying push later.
 - **`NO_REMOTE` ≠ push failure** — means no git remote configured. The save fully succeeded: the entry is written and committed locally, and `NO_REMOTE` is the complete, correct terminal state for a repo with no remote (nothing more to do). Only treat it as actionable on the repo's *first* save, where it's the cue to offer [First-time remote setup](#first-time-remote-setup). Never call `--set-remote` unless the push line explicitly said `NO_REMOTE` — if origin already exists it will error.
-- **`id: __ID__` must be unquoted** — `id: '__ID__'` causes kb-save.js to exit 2: `ERROR: stdin frontmatter must contain id: __ID__`.
+- **`id: __ID__` must be unquoted** — `id: '__ID__'` causes kb-save.js to exit 2: `ERROR: --file frontmatter must contain id: __ID__`.
+- **Write the new-entry draft into `entries/`** — for `add` via `--file`, `Write` the draft to `entries/<slug>.md` with `id: __ID__`. The helper assigns the real id, renames the file to `entries/kb-NNNN-<slug>.md`, and removes the un-id'd draft, so only the final entry is committed.
 - **Anchor entry before dependent entries** — links validate against entries present at save time. Save the anchor first to get its real kb-NNNN id, then save dependents.
 - **kb-build-index.js runs automatically after every save/edit** — don't call it manually. Only run it explicitly after `init` or if the index is suspected corrupt.
 - **Five entry types, not four** — the authoritative list is in kb-save.js: `factual_reference`, `decision`, `pattern_convention`, `lesson_learned`, `bookmark`.
@@ -110,22 +126,27 @@ thesis, separate entries for distinct findings, joined with `part_of` /
    cover our analytics needs without a second system to operate.
    ```
 
-3. **Save immediately** — pipe the entry to the helper via heredoc redirect
-   (IMPORTANT: start the command with `node`, not `cat | node`):
-   `node ${CLAUDE_SKILL_DIR}/scripts/kb-save.js --slug "<slug-from-title>" <<'EOF'`
-   (slug format: lowercase, words hyphen-separated, no punctuation — e.g. title
-   "API rate limit" → `api-rate-limit`. The helper prefixes the `kb-NNNN` id.)
+   **`Write` the draft** to `entries/<slug>.md` in the data repo (slug format:
+   lowercase, words hyphen-separated, no punctuation — e.g. title "API rate limit"
+   → `api-rate-limit`). Keep `id: __ID__` in the frontmatter — the helper assigns
+   the real id and renames the file.
+
+3. **Save immediately** — hand the draft file to the helper with `--file`:
+   `node ${CLAUDE_SKILL_DIR}/scripts/kb-save.js --slug "<slug-from-title>" --file entries/<slug>.md`
+   (the `--slug` sets the final filename; the helper prefixes the `kb-NNNN` id.)
    It resolves `data_dir`, pulls (if upstream), assigns a collision-free id,
-   validates (closed enums, no dangling links), writes the file, bumps
-   `kb.json`, commits, and pushes. It prints `SAVED kb-NNNN ...` with a `push:`
-   line. If it prints an `ERROR:` line, fix the entry and retry; if the error is
-   about `data_dir`, stop and point the user to `/git-kb init`.
+   validates (closed enums, no dangling links), renames the draft to
+   `entries/kb-NNNN-<slug>.md`, bumps `kb.json`, commits, and pushes. It prints
+   `SAVED kb-NNNN ...` with a `push:` line. If it prints an `ERROR:` line, fix the
+   entry and retry; if the error is about `data_dir`, stop and point the user to
+   `/git-kb init`. (Piping a program's output? Use the stdin heredoc fallback
+   instead of `--file` — the command must still start with `node`.)
 
    **Splitting into multiple entries:** the helper assigns each id at save time,
    so you can't reference a sibling's id before it exists. Save the **anchor**
-   entry first, read the `SAVED kb-NNNN` it prints, then save the dependent
-   entries with `links:` pointing at that real id. One `kb-save.js` call per
-   entry.
+   entry first, read the `SAVED kb-NNNN` it prints, then `Write` + save the
+   dependent entries with `links:` pointing at that real id. One `kb-save.js` call
+   per entry.
 
 ---
 
@@ -136,23 +157,25 @@ corrections and refinements** to an existing entry. **For a decision that was
 replaced** by new thinking, do NOT edit in place — `add` a new entry with a
 `supersedes` link to the old one, preserving the history.
 
-1. **Identify the entry.** If the payload names an id (`kb-NNNN`), use it; else
-   run the search helper to find it. The search helper returns the full body of
-   top hits — **use that content directly; do NOT re-read the entry file.** If
-   the entry wasn't in the search results, read it then, but only then.
-2. **Draft the full updated entry** using the content from step 1 and the
-   type/rel/direction rules from the `add` section above (including the
-   `always`/`applies_to` cross-cutting fields — preserve any already set, and
-   add one if the edit turns the entry into cross-cutting guidance). Keep the
-   real `id:` (not `__ID__`), apply the change, bump `updated:` to today, keep
-   `created:` as-is.
-3. **Save immediately** — pipe the full updated entry via heredoc redirect
-   (IMPORTANT: start the command with `node`, not `cat | node`):
-   `node ${CLAUDE_SKILL_DIR}/scripts/kb-save.js --edit <id> [--slug "<new-slug>"] <<'EOF'`
-   (include `--slug` only if the title changed enough to warrant a rename — the
-   helper does a `git mv`). It validates, overwrites in place (no new id, no
-   `next_id` bump), commits `edit kb-NNNN: ...`, and pushes. It prints
-   `EDITED kb-NNNN` + a `push:` line. On an `ERROR:` line, fix and retry.
+1. **Identify the entry and its file.** If the payload names an id (`kb-NNNN`),
+   use it; else run the search helper to find it. Both `search` and `get` print
+   the entry's `file: entries/kb-NNNN-*.md` path along with its full body — note
+   that path; you'll `Edit` it directly.
+2. **`Edit` the entry file in place.** Make the surgical change with the `Edit`
+   tool on `entries/kb-NNNN-*.md` — you no longer reproduce the whole entry.
+   Bump `updated:` to today; keep `created:` and the real `id:` as-is. Follow the
+   type/rel/direction rules from the `add` section (including the
+   `always`/`applies_to` cross-cutting fields — preserve any already set, and add
+   one if the edit turns the entry into cross-cutting guidance). If the entry
+   wasn't in the search results, `Read` it first so the `Edit` matches.
+3. **Save immediately** — commit the edited file:
+   `node ${CLAUDE_SKILL_DIR}/scripts/kb-save.js --edit <id> [--slug "<new-slug>"]`
+   With no `--file` and nothing piped, the helper commits the file you just
+   edited on disk. Include `--slug` only if the title changed enough to warrant a
+   rename (the helper does a `git mv`). It validates, commits `edit kb-NNNN: ...`
+   (no new id, no `next_id` bump), and pushes. It prints `EDITED kb-NNNN` + a
+   `push:` line. On an `ERROR:` line, fix and retry. (To edit from a program's
+   output instead, pipe it via the stdin heredoc, or pass `--file <path>`.)
 
 ---
 
