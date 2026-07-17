@@ -10,20 +10,22 @@
 //   human block — mirrors kb-search's --jsonl so the hook can reuse renders.
 //   Missing IDs are omitted in --jsonl mode (nothing to render).
 
+import { join } from "node:path";
 import { resolveDataDir, loadEntries } from "./shared.js";
 
 // ─── Presentation ────────────────────────────────────────────────────────────
 
 // Render one entry to a human-readable block. Unlike kb-search's formatter this
 // omits match/score — a direct fetch has no query to score against.
-function formatEntry(e, titleById) {
+function formatEntry(e, titleById, entriesDir) {
   const lines = [];
   lines.push(`### ${e.id} — ${e.title}`);
   lines.push(
     `type: ${e.type}   tags: [${e.tags.join(", ")}]   created: ${e.created}   updated: ${e.updated}`,
   );
   if (e.url) lines.push(`url: ${e.url}`);
-  lines.push(`file: entries/${e.file}`);
+  // Absolute path so it can be Read/Edited directly without resolving data_dir.
+  lines.push(`file: ${join(entriesDir, e.file)}`);
   if (e.links.length) {
     const linkStr = e.links
       .map((id) => (titleById[id] ? `${id} (${titleById[id]})` : id))
@@ -60,11 +62,11 @@ if (jsonl) {
   // consumer has nothing to show for them). Order follows the request.
   const lines = ids
     .filter((id) => byId[id])
-    .map((id) => JSON.stringify({ id, render: formatEntry(byId[id], titleById) }));
+    .map((id) => JSON.stringify({ id, render: formatEntry(byId[id], titleById, resolved.entriesDir) }));
   process.stdout.write(lines.join("\n") + (lines.length ? "\n" : ""));
 } else {
   const blocks = ids.map((id) =>
-    byId[id] ? formatEntry(byId[id], titleById) : `### ${id} — NOT FOUND`,
+    byId[id] ? formatEntry(byId[id], titleById, resolved.entriesDir) : `### ${id} — NOT FOUND`,
   );
   process.stdout.write(blocks.join("\n\n") + "\n");
 }

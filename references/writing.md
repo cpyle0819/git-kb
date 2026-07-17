@@ -12,8 +12,8 @@ The helper takes the entry content from one of three sources, in this precedence
    path: `node ${CLAUDE_SKILL_DIR}/scripts/kb-save.js --file entries/<name>.md ...`.
 2. **Edit-in-place** (edit mode only) — with **no `--file` and empty stdin**, the
    helper commits the entry file you already edited on disk. Since `search`/`get`
-   print the entry's `file: entries/kb-NNNN-*.md` path, you can `Edit` that file
-   directly and call `--edit kb-NNNN` with nothing piped.
+   print the entry's absolute `file:` path (`<data_dir>/entries/kb-NNNN-*.md`), you
+   can `Edit` that path directly and call `--edit kb-NNNN` with nothing piped.
 3. **stdin (heredoc)** — the fallback, for piping a program's output straight in
    (e.g. `some-extractor | node kb-save.js --slug ...`). Empty stdin (a TTY or
    `< /dev/null`) does NOT count as stdin content.
@@ -159,10 +159,11 @@ replaced** by new thinking, do NOT edit in place — `add` a new entry with a
 
 1. **Identify the entry and its file.** If the payload names an id (`kb-NNNN`),
    use it; else run the search helper to find it. Both `search` and `get` print
-   the entry's `file: entries/kb-NNNN-*.md` path along with its full body — note
-   that path; you'll `Edit` it directly.
+   the entry's absolute `file:` path (`<data_dir>/entries/kb-NNNN-*.md`) along with
+   its full body — that path is ready to hand to `Edit` as-is, no `data_dir`
+   lookup needed.
 2. **`Edit` the entry file in place.** Make the surgical change with the `Edit`
-   tool on `entries/kb-NNNN-*.md` — you no longer reproduce the whole entry.
+   tool on that absolute path — you no longer reproduce the whole entry.
    Bump `updated:` to today; keep `created:` and the real `id:` as-is. Follow the
    type/rel/direction rules from the `add` section (including the
    `always`/`applies_to` cross-cutting fields — preserve any already set, and add

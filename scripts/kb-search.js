@@ -5,6 +5,7 @@
 //   Pass "*" as the sole term to list all (useful with --type).
 
 import { parseArgs } from "node:util";
+import { join } from "node:path";
 import { resolveDataDir, loadEntries } from "./shared.js";
 
 // ─── Core ────────────────────────────────────────────────────────────────────
@@ -100,14 +101,15 @@ function search(entries, { rawTerms, typeFilter }) {
 
 // Render one result to the human-readable text block. Single source of truth so
 // the skill's search output and the hook's injected context never diverge.
-function formatEntry(r, titleById) {
+function formatEntry(r, titleById, entriesDir) {
   const lines = [];
   lines.push(`### ${r.id} — ${r.title}`);
   lines.push(
     `type: ${r.type}   tags: [${r.tags.join(", ")}]   created: ${r.created}   updated: ${r.updated}   match: ${r.why} (score ${r.score})`,
   );
   if (r.url) lines.push(`url: ${r.url}`);
-  lines.push(`file: entries/${r.file}`);
+  // Absolute path so it can be Read/Edited directly without resolving data_dir.
+  lines.push(`file: ${join(entriesDir, r.file)}`);
   if (r.links.length) {
     const linkStr = r.links
       .map((id) => (titleById[id] ? `${id} (${titleById[id]})` : id))
@@ -118,19 +120,19 @@ function formatEntry(r, titleById) {
   return lines.join("\n");
 }
 
-function formatResults(results, titleById) {
-  return results.map((r) => formatEntry(r, titleById)).join("\n\n") + "\n";
+function formatResults(results, titleById, entriesDir) {
+  return results.map((r) => formatEntry(r, titleById, entriesDir)).join("\n\n") + "\n";
 }
 
 // One JSON object per line: {id, score, render}. Consumers (the hook) parse
 // line-by-line, filter by id, and reuse `render` verbatim.
-function formatResultsJsonl(results, titleById) {
+function formatResultsJsonl(results, titleById, entriesDir) {
   return results
     .map((r) =>
       JSON.stringify({
         id: r.id,
         score: r.score,
-        render: formatEntry(r, titleById),
+        render: formatEntry(r, titleById, entriesDir),
       }),
     )
     .join("\n");
@@ -174,6 +176,6 @@ if (result.status === "no_matches") {
 
 process.stdout.write(
   values.jsonl
-    ? formatResultsJsonl(result.results, titleById)
-    : formatResults(result.results, titleById),
+    ? formatResultsJsonl(result.results, titleById, resolved.entriesDir)
+    : formatResults(result.results, titleById, resolved.entriesDir),
 );
