@@ -36,10 +36,11 @@ export function parseEntry(text) {
     .filter(Boolean);
   const links = [...fm.matchAll(/to:[ \t]*(kb-\d+)/g)].map((x) => x[1]);
   const url = get("url") || null;
-  // Cross-cutting retrieval fields (see spec/entry-format.md). `always` injects
-  // the entry on every prompt; `applies_to` injects it when the prompt's
-  // activity matches (both still subject to per-session dedup).
-  const always = /^(true|yes)$/i.test(get("always"));
+  // Cross-cutting retrieval fields (see spec/entry-format.md). `kernel` injects
+  // the entry's full BODY on every prompt, exempt from per-session dedup — the
+  // small always-resident house-style block. `applies_to` injects it as a title
+  // pointer when the prompt's activity matches (subject to per-session dedup).
+  const kernel = /^(true|yes)$/i.test(get("kernel"));
   const appliesTo = get("applies_to")
     .replace(/^\[|\]$/g, "")
     .split(",")
@@ -51,7 +52,7 @@ export function parseEntry(text) {
     type: get("type"),
     url,
     tags,
-    always,
+    kernel,
     appliesTo,
     links,
     created: get("created"),

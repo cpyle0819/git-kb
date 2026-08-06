@@ -71,8 +71,8 @@ The body has no required structure.
 | `type`    | yes      | enum         | Closed set — see below.                                                                                                       |
 | `url`     | no       | string       | A full URL (`https://...`). Required for `type: bookmark`; optional for others (e.g. a factual_reference with a source link). |
 | `tags`    | no       | list[string] | **Free-form.** Lowercase, hyphenated. Primary lexical-search and filter signal; matched as wildcards. `[]` if none.           |
-| `applies_to` | no    | list[enum]   | **Cross-cutting retrieval.** Activities this entry applies to, so it surfaces on prompts of that *kind* even with no keyword overlap. Closed set: `writing`, `reviewing`, `planning`, `coding`. Omit for topic-scoped entries.        |
-| `always`  | no       | bool         | **Cross-cutting retrieval.** `true` = inject on every prompt this session (once, via dedup). For standing rules only; prefer `applies_to` when the entry is tied to a kind of work.                                                    |
+| `applies_to` | no    | list[enum]   | **Cross-cutting retrieval.** Activities this entry applies to, so its **title pointer** surfaces on prompts of that *kind* even with no keyword overlap. Closed set: `writing`, `reviewing`, `planning`, `coding`. Omit for topic-scoped entries.        |
+| `kernel`  | no       | bool         | **Always-resident guidance.** `true` = inject this entry's full **body** verbatim on every prompt, **exempt from per-session dedup** (re-injected each turn). Reserve for a tiny set of invariant rules that must govern every turn; keep each kernel entry short. Everything else is a title pointer.                                                    |
 | `links`   | no       | list[edge]   | Curated graph edges; `rel` is a closed set. `[]` if none.                                                                     |
 | `created` | yes      | `YYYY-MM-DD` | Set once at add.                                                                                                              |
 | `updated` | yes      | `YYYY-MM-DD` | Bumped on edit. (For real history, use `git log --follow`.)                                                                   |
@@ -96,26 +96,36 @@ No controlled vocabulary. Any lowercase, hyphenated token is valid. Tags are the
 main lexical/filter signal and are matched as wildcards (e.g. a search for
 `deploy` matches the tag `deployment`). Use as many as are genuinely useful.
 
-### `applies_to` / `always` — cross-cutting retrieval
+### `applies_to` / `kernel` — retrieval beyond keywords
 
 Keyword matching surfaces an entry when the prompt names its subject. That
 structurally misses guidance relevant to a *kind of work* the prompt never names
 — writing-style rules apply to "reply to this thread" though it shares no style
 keyword. These two optional fields close that gap; the auto-lookup hook
-(`kb-trigger.js`) honors them.
+(`kb-trigger.js`) honors them. They differ in **what** they inject and **whether
+they dedup**:
 
 - **`applies_to`** lists **activities** (closed set: `writing`, `reviewing`,
-  `planning`, `coding`). The hook classifies each prompt's activity from a static
-  trigger-word lexicon (`ACTIVITY_LEXICON` in `shared.js`) and injects an entry
-  whenever the prompt's activity intersects its `applies_to` — at zero keyword
-  overlap. The lexicon is a tuning knob: extend it as false negatives surface.
-- **`always: true`** injects the entry on every non-skipped prompt.
+  `planning`, `coding`) and injects a **title pointer**. The hook classifies each
+  prompt's activity from a static trigger-word lexicon (`ACTIVITY_LEXICON` in
+  `shared.js`) and lists the entry whenever the prompt's activity intersects its
+  `applies_to` — at zero keyword overlap. Gated by the per-session dedup ledger,
+  so the pointer is listed **at most once per session**. The model fetches the
+  body with `kb-get` if the entry bears on the task. The lexicon is a tuning
+  knob: extend it as false negatives surface.
+- **`kernel: true`** injects the entry's full **body** verbatim on every
+  non-skipped prompt, **exempt from dedup** — re-injected each turn. This is the
+  always-resident house-style block: an invariant that must govern every turn
+  can't depend on a fetch that may be skipped, and re-injecting each turn keeps
+  it salient as context grows (adherence to early-context instructions decays).
 
-Both are gated by the same per-session dedup ledger as keyword matches, so a
-cross-cutting entry injects **at most once per session**, not on every prompt.
-Cross-cutting entries are ordered ahead of keyword matches so the context cap
-(`MAX_CONTEXT_ENTRIES`) never starves them. Use these sparingly — most entries
-are topic-scoped and want neither.
+**Why the split.** A pointer that dedups is right for situational guidance —
+listed once, fetched when relevant, cheap to miss. An invariant that must *always
+hold* is the opposite: it must be present as text every turn. Deduping it (the
+old `always` behavior) burned it on turn 1 and left later turns ungoverned.
+Reserve `kernel` for a tiny set of short entries; everything else is a pointer.
+Kernel bodies are ordered ahead of pointers so the context cap
+(`MAX_CONTEXT_ENTRIES`, which bounds keyword pointers only) never starves them.
 
 ### `links` — the graph
 

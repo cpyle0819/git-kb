@@ -163,9 +163,9 @@ function validate(fm, id, existing) {
     errors.push(`type '${get("type")}' not in closed enum`);
   if (get("type") === "bookmark" && !get("url"))
     errors.push("type 'bookmark' requires a `url:` field");
-  const always = get("always");
-  if (always && !/^(true|false|yes|no)$/i.test(always))
-    errors.push(`always '${always}' must be true/false (or omitted)`);
+  const kernel = get("kernel");
+  if (kernel && !/^(true|false|yes|no)$/i.test(kernel))
+    errors.push(`kernel '${kernel}' must be true/false (or omitted)`);
   const appliesTo = get("applies_to")
     .replace(/^\[|\]$/g, "")
     .split(",")

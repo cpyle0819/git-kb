@@ -8,7 +8,8 @@
 // The index is a flat map of key → [entry ids]. Most keys are prompt keywords
 // (tags, title words, type). Two reserved keys carry the cross-cutting signals
 // the hook uses when the prompt shares no keyword with an entry:
-//   __always__            → ids of entries with `always: true`
+//   __kernel__            → ids of entries with `kernel: true` (body injected
+//                           every prompt, dedup-exempt)
 //   __activity:<name>__   → ids of entries whose `applies_to` lists <name>
 // The `__…__` shape can't collide with a prompt token (tokens are [a-z0-9]).
 
@@ -69,7 +70,7 @@ for (const e of entries) {
   if (e.type) addKeyword(e.type.toLowerCase(), e.id);
 
   // Cross-cutting signals — reserved keys, unreachable by prompt tokens.
-  if (e.always) addKeyword("__always__", e.id);
+  if (e.kernel) addKeyword("__kernel__", e.id);
   for (const activity of e.appliesTo) {
     addKeyword(`__activity:${activity}__`, e.id);
   }

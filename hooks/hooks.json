@@ -9,6 +9,18 @@
           }
         ]
       }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "Bash|.*Comment|.*Review|.*Revision|.*Issue|.*Ticket|.*PullRequest",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node ${CLAUDE_PLUGIN_ROOT}/scripts/kb-prose-judge.js",
+            "timeout": 60
+          }
+        ]
+      }
     ]
   }
 }

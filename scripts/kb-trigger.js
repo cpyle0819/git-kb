@@ -2,17 +2,20 @@
 // kb-trigger.js — UserPromptSubmit hook that checks if the user's prompt
 // matches the KB and injects relevant entries as context.
 //
-// Two retrieval signals run per prompt:
-//   1. Keyword match — ≥THRESHOLD distinct prompt tokens hit an entry's
-//      tags/title/type (the original lexical path).
-//   2. Cross-cutting match — entries flagged `always: true`, and entries whose
-//      `applies_to` activity matches the prompt's classified activity, inject
-//      even at zero keyword overlap. This surfaces guidance that applies to a
-//      KIND of work the prompt never names (e.g. writing rules on "reply to
-//      this thread"). Cross-cutting entries are ordered FIRST so the context
-//      cap can't starve them.
-// Both signals feed the same per-session dedup ledger, so any entry injects at
-// most once per session regardless of which signal surfaced it.
+// Three retrieval signals run per prompt:
+//   1. Kernel — entries flagged `kernel: true` have their full BODY injected on
+//      every non-skipped prompt, EXEMPT from per-session dedup. This is the small
+//      always-resident house-style block: the invariant rules that must govern
+//      every turn, re-injected each turn to survive context growth. Bodies, not
+//      pointers — an invariant that must always hold can't depend on a fetch.
+//   2. Keyword match — ≥THRESHOLD distinct prompt tokens hit an entry's
+//      tags/title/type (the original lexical path). Injected as title POINTERS.
+//   3. Activity match — entries whose `applies_to` activity matches the prompt's
+//      classified activity inject even at zero keyword overlap, as title
+//      pointers. Surfaces guidance for a KIND of work the prompt never names
+//      (e.g. writing rules on "reply to this thread").
+// Signals 2 and 3 feed the same per-session dedup ledger, so a pointer entry is
+// listed at most once per session. The kernel bypasses the ledger entirely.
 //
 // Observability: set KB_HOOK_DEBUG=1 to append a per-prompt JSONL record
 // (keyword hits, detected activities, injected ids, and below-threshold
@@ -40,6 +43,12 @@ import { getConfigPath, expandHome, classifyActivities } from "./shared.js";
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const THRESHOLD = 2; // minimum distinct keyword hits to trigger the keyword path
 const MAX_CONTEXT_ENTRIES = 5;
+// Kernel bodies inject verbatim every turn, so an oversized kernel would hit the
+// blind ~2KB truncation of Claude Code's 10K additionalContext cap (see README
+// "Gotcha: the 10K hook-output cap"). Guard it: if the assembled kernel bodies
+// exceed this, keep whole entries in order until the next would overflow, and
+// degrade the rest to pointers. Well under 10K to leave room for the pointer list.
+const KERNEL_BUDGET = 7000;
 const DEBUG = /^(1|true|yes)$/i.test(process.env.KB_HOOK_DEBUG ?? "");
 
 const STOP = new Set([
@@ -231,28 +240,23 @@ for (const w of words) {
   if (index[w]) hitKeywords.add(w);
 }
 
-// Cross-cutting retrieval: entries relevant by KIND of work, not keyword.
-// `__always__` fires on every non-skipped prompt; `__activity:<name>__` fires
-// when the prompt's classified activity matches. These surface at zero keyword
-// overlap. (Reserved index keys — see kb-build-index.js.)
+// Kernel: `kernel: true` entries whose BODY is injected every prompt, exempt
+// from dedup (the always-resident house-style block). Activity: entries whose
+// `applies_to` matches the prompt's classified activity, injected as title
+// pointers. Both are reserved index keys — see kb-build-index.js.
 const activities = classifyActivities(words);
-const alwaysIds = index["__always__"] ?? [];
+const kernelIds = index["__kernel__"] ?? [];
 const activityIds = [];
 for (const a of activities) {
   for (const id of index[`__activity:${a}__`] ?? []) {
     if (!activityIds.includes(id)) activityIds.push(id);
   }
 }
-// Cross-cutting ids, de-duped, in a stable order (always before activity).
-const crossIds = [];
-for (const id of [...alwaysIds, ...activityIds]) {
-  if (!crossIds.includes(id)) crossIds.push(id);
-}
 
 const keywordFires = hitKeywords.size >= THRESHOLD;
 
-// Nothing to do if neither signal has anything to contribute.
-if (!keywordFires && crossIds.length === 0) {
+// Nothing to do if no signal has anything to contribute.
+if (!keywordFires && kernelIds.length === 0 && activityIds.length === 0) {
   debugLog({
     session: sessionId,
     prompt: prompt.slice(0, 200),
@@ -265,37 +269,68 @@ if (!keywordFires && crossIds.length === 0) {
   process.exit(0);
 }
 
-// Fetch renders. Cross-cutting entries first (by id, unranked), then keyword
-// results — so the context cap can never starve the always/activity guidance.
-const crossResults = runGet(crossIds).map((r) => ({ ...r, via: "cross" }));
+// Fetch renders. Kernel entries carry their full body (injected verbatim);
+// activity + keyword entries are surfaced as title pointers.
+const kernelResults = runGet(kernelIds).map((r) => ({ ...r, via: "kernel" }));
+const activityResults = runGet(activityIds).map((r) => ({ ...r, via: "activity" }));
 const keywordResults = keywordFires
   ? runSearch([...hitKeywords].slice(0, 6)).map((r) => ({ ...r, via: "keyword" }))
   : [];
 
-// Keyword hits that duplicate a cross-cutting entry are dropped below.
-const crossSeen = new Set(crossResults.map((r) => r.id));
+// The kernel is always resident; a pointer that duplicates a kernel entry is
+// noise, so drop it from the pointer list.
+const kernelSeen = new Set(kernelResults.map((r) => r.id));
 
-// ─── IDs-only injection ─────────────────────────────────────────────────────
-// We inject entry IDS + titles, never the entry bodies. Claude Code hard-caps a
-// hook's additionalContext at 10,000 chars (over-cap output is written to a file
-// and replaced in-context with a blind ~2KB preview that silently truncates whole
-// entries mid-stream — see README "Gotcha: the 10K hook-output cap"). A list of
-// ids can never approach that cap, so everything the hook surfaces reaches the
-// model intact. The model fetches the bodies it needs with kb-get. Per-session
-// dedup makes that at most one fetch per entry per session: an id surfaced once is
-// not listed again, so the extra fetch is paid once, not every prompt.
+// ─── Injection: kernel body (every turn) + pointer list (deduped) ───────────
+// Two shapes reach the model. The KERNEL is the small always-resident house-style
+// block — its full BODY is injected verbatim on every non-skipped prompt, exempt
+// from the dedup ledger, so the invariant rules govern each turn even as context
+// grows (an invariant that must always hold can't depend on a fetch that may be
+// skipped). Everything else is a title POINTER the model fetches with kb-get if
+// relevant, deduped per session so a given pointer is listed at most once.
 //
-// Because ids are tiny, cross-cutting guidance (always-on + activity-matched) is
-// listed IN FULL and uncapped — it can't be starved by keyword noise. Only the
-// keyword-ranked hits are capped, to keep the list signal-dense.
+// Claude Code hard-caps a hook's additionalContext at 10,000 chars (over-cap
+// output is written to a file and replaced with a blind ~2KB preview that
+// silently truncates — see README "Gotcha: the 10K hook-output cap"). The kernel
+// is deliberately kept small (a handful of entries, a few hundred lines total) so
+// body + pointer list stays well under the cap; pointers are tiny regardless.
 const ledger = loadLedger(sessionId, stamp);
-const freshCross = crossResults.filter((r) => !ledger.seen.has(r.id));
+// Kernel bodies bypass the ledger — re-injected every turn by design. Guard the
+// total body size against the 10K cap: keep whole entries in order until the next
+// would overflow KERNEL_BUDGET; degrade any overflow to pointers so the model at
+// least sees the id. With one short kernel entry this never triggers; it's the
+// safety seam for when the kernel grows.
+const kernelBodies = [];
+const kernelOverflow = [];
+{
+  let used = 0;
+  for (const r of kernelResults) {
+    const size = r.render.length;
+    if (used + size <= KERNEL_BUDGET) {
+      kernelBodies.push(r);
+      used += size;
+    } else {
+      kernelOverflow.push(r);
+    }
+  }
+}
+// Pointers: activity + keyword hits, minus anything already in the kernel, minus
+// anything already surfaced this session. Keyword hits are capped; activity hits
+// are not (cheap, and tied to the kind of work).
+const freshActivity = activityResults.filter(
+  (r) => !kernelSeen.has(r.id) && !ledger.seen.has(r.id),
+);
 const freshKeyword = keywordResults
-  .filter((r) => !crossSeen.has(r.id) && !ledger.seen.has(r.id))
+  .filter((r) => !kernelSeen.has(r.id) && !ledger.seen.has(r.id))
+  .filter((r) => !freshActivity.some((a) => a.id === r.id))
   .slice(0, MAX_CONTEXT_ENTRIES);
+// Kernel entries that overflowed the body budget are surfaced as pointers so the
+// model still sees them (marked via `via: "kernel-overflow"` for the debug log).
+const overflowPointers = kernelOverflow.map((r) => ({ ...r, via: "kernel-overflow" }));
+const pointers = [...overflowPointers, ...freshActivity, ...freshKeyword];
 
-const surfaced = [...freshCross, ...freshKeyword];
-if (surfaced.length === 0) {
+// Nothing fresh to say — no kernel and every pointer already surfaced.
+if (kernelBodies.length === 0 && pointers.length === 0) {
   debugLog({
     session: sessionId,
     prompt: prompt.slice(0, 200),
@@ -303,48 +338,72 @@ if (surfaced.length === 0) {
     reason: "all_deduped",
     keywords: [...hitKeywords],
     activities: [...activities],
-    cross_ids: crossIds,
+    kernel_ids: kernelIds,
   });
-  process.exit(0); // all matches already surfaced this session
+  process.exit(0);
 }
 
-// An id surfaced this prompt is marked seen, so it is never re-listed this session.
-for (const r of surfaced) ledger.seen.add(r.id);
+// Only pointers are marked seen; kernel entries are intentionally never recorded
+// so they re-inject every turn.
+for (const r of pointers) ledger.seen.add(r.id);
 saveLedger(sessionId, ledger.seen, stamp);
 
 debugLog({
   session: sessionId,
   prompt: prompt.slice(0, 200),
-  injected: surfaced.map((r) => ({ id: r.id, via: r.via })),
+  injected: [
+    ...kernelBodies.map((r) => ({ id: r.id, via: r.via })),
+    ...pointers.map((r) => ({ id: r.id, via: r.via })),
+  ],
   keywords: [...hitKeywords],
   activities: [...activities],
-  cross_ids: crossIds,
+  kernel_ids: kernelIds,
 });
 
-// Header names both signals so the reason an entry surfaced is legible.
+// Header names the active signals so the reason context surfaced is legible.
 const matchBits = [];
+if (kernelBodies.length) matchBits.push("house-style kernel");
 if (hitKeywords.size) matchBits.push(`keywords: ${[...hitKeywords].join(", ")}`);
 if (activities.size) matchBits.push(`activity: ${[...activities].join(", ")}`);
-if (alwaysIds.length) matchBits.push("always-on");
 
-// First render line is "### <id> — <title>"; strip the leading "### " so each
-// bullet reads "kb-0066 — Acceptance criteria guidance" (id already included).
+// The kernel body is the `render`'s content between its "---" fences — inject it
+// verbatim. Framed as house-style FACTS, not an imperative system command:
+// imperative out-of-band instructions can trip Claude's prompt-injection defenses
+// (see Anthropic hooks docs), which surfaces the text to the user instead of
+// treating it as context.
+const bodyOf = (r) => {
+  const m = r.render.match(/\n---\n([\s\S]*?)\n---\s*$/);
+  return (m ? m[1] : r.render).trim();
+};
+// First render line is "### <id> — <title>"; strip "### " for the pointer label.
 const labelOf = (r) => (r.render.split("\n", 1)[0] || r.id).replace(/^#+\s*/, "");
-const list = surfaced.map((r) => `- ${labelOf(r)}`).join("\n");
+
+const sections = [`[KB auto-lookup — ${matchBits.join("; ")}]`];
+
+if (kernelBodies.length) {
+  sections.push(
+    "\nHouse writing style — these rules govern all prose you produce this turn " +
+      "(replies, summaries, comments, CRs, tickets, docs). They are standing " +
+      "guidance, already in effect:\n\n" +
+      kernelBodies.map((r) => bodyOf(r)).join("\n\n"),
+  );
+}
+
+if (pointers.length) {
+  sections.push(
+    "\nRelated KB entries (titles only — the title is not the guidance). Fetch the " +
+      "full body of any that bear on this task and work from it before acting. " +
+      "Fetch via the Skill tool so it runs pre-approved:\n" +
+      '  Skill(skill: "git-kb", args: "get <id> [<id> ...]")\n' +
+      "(Batch the ids into one call.) Each is listed at most once per session.\n\n" +
+      pointers.map((r) => `- ${labelOf(r)}`).join("\n"),
+  );
+}
 
 const output = {
   hookSpecificOutput: {
     hookEventName: "UserPromptSubmit",
-    additionalContext:
-      `[KB auto-lookup — ${matchBits.join("; ")}]\n\n` +
-      `Relevant KB entries (titles only — the title is NOT the guidance). You MUST ` +
-      `fetch the full body of each entry relevant to this task and work from it ` +
-      `before acting; do not rely on the title or your memory of the entry. Fetch ` +
-      `via the Skill tool, not a raw Bash call, so the fetch runs pre-approved:\n` +
-      `  Skill(skill: "git-kb", args: "get <id> [<id> ...]")\n` +
-      `(Batch the ids into one call.) Each id is listed at most once per session, so ` +
-      `fetch it now — it will not be re-listed on later prompts.\n\n` +
-      list,
+    additionalContext: sections.join("\n"),
   },
 };
 

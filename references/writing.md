@@ -78,7 +78,7 @@ thesis, separate entries for distinct findings, joined with `part_of` /
      flip the direction — don't downgrade to `relates_to`. Reserve `relates_to`
      for when no directional rel fits _either way_ (peer ties, person↔team
      leadership). Torn between two rels in the SAME direction → prefer the weaker.
-   - **`always` / `applies_to`** (cross-cutting retrieval — usually OMIT both).
+   - **`applies_to` / `kernel`** (retrieval beyond keywords — usually OMIT both).
      The auto-lookup hook normally surfaces an entry only when the prompt shares
      keywords with its tags/title. These two optional fields let an entry surface
      on prompts that never name its subject. Most entries want neither — a fact,
@@ -86,21 +86,23 @@ thesis, separate entries for distinct findings, joined with `part_of` /
      already handle. Add one ONLY when the entry is genuinely cross-cutting:
      - **`applies_to: [<activity>, …]`** — for guidance that applies to a *kind of
        work* rather than a topic (e.g. writing-style rules relevant whenever the
-       assistant authors output, no matter the subject). The entry then injects
-       whenever the prompt's activity matches. Valid activities are a closed set
-       keyed to the classifier: **`writing`** (drafting/editing any prose — a
-       ticket, CR, comment, reply, summary, doc), **`reviewing`** (critique,
-       feedback, audit), **`planning`** (design, roadmap, approach), **`coding`**
-       (implement, refactor, debug, test). Use `writing` for style/prose rules,
-       `reviewing` for review checklists, and so on. Value is a YAML flow list of
-       these names, lowercase.
-     - **`always: true`** — for an entry that should be in context on *every*
-       prompt this session (safety rules, a standing constraint). Stronger and
-       blunter than `applies_to`; reserve it for the few entries that truly apply
-       regardless of activity. Per-session dedup still holds, so an `always` entry
-       injects at most once per session, not on literally every prompt.
-     Both are subject to the same dedup ledger as keyword matches. Prefer the
-     narrower `applies_to` over `always` when the entry is tied to a kind of work.
+       assistant authors output, no matter the subject). The entry's **title
+       pointer** then injects whenever the prompt's activity matches; the model
+       fetches the body if relevant. Valid activities are a closed set keyed to
+       the classifier: **`writing`** (drafting/editing any prose — a ticket, CR,
+       comment, reply, summary, doc), **`reviewing`** (critique, feedback, audit),
+       **`planning`** (design, roadmap, approach), **`coding`** (implement,
+       refactor, debug, test). Use `writing` for style/prose rules, `reviewing`
+       for review checklists, and so on. Value is a YAML flow list of these names,
+       lowercase. Subject to per-session dedup — listed at most once per session.
+     - **`kernel: true`** — for a tiny set of **invariant** rules that must govern
+       *every* turn. Injects the entry's full **body** verbatim on every prompt,
+       **exempt from dedup** (re-injected each turn). Reserve it for short,
+       always-true guidance (the house-style kernel); a long body re-injected each
+       turn wastes context, and deduped-once was the old failure that left later
+       turns ungoverned. Prefer the narrower `applies_to` pointer whenever an
+       entry is merely *relevant to* a kind of work rather than a standing
+       invariant that must always be present as text.
    - `created`/`updated` = today, as `YYYY-MM-DD`.
 
    **Canonical entry shape** (frontmatter is a YAML block between `---` fences;
@@ -113,8 +115,8 @@ thesis, separate entries for distinct findings, joined with `part_of` /
    type: decision
    url:                       # required for bookmark, omit otherwise
    tags: [database, analytics, postgres]
-   applies_to:                # optional; cross-cutting entries only (see above)
-   always:                    # optional; every-prompt entries only (see above)
+   applies_to:                # optional; activity-pointer entries only (see above)
+   kernel:                    # optional; always-resident invariant entries only (see above)
    links:
      - rel: relates_to
        to: kb-0002
@@ -166,8 +168,8 @@ replaced** by new thinking, do NOT edit in place — `add` a new entry with a
    tool on that absolute path — you no longer reproduce the whole entry.
    Bump `updated:` to today; keep `created:` and the real `id:` as-is. Follow the
    type/rel/direction rules from the `add` section (including the
-   `always`/`applies_to` cross-cutting fields — preserve any already set, and add
-   one if the edit turns the entry into cross-cutting guidance). If the entry
+   `applies_to`/`kernel` fields — preserve any already set, and add one if the
+   edit turns the entry into cross-cutting guidance). If the entry
    wasn't in the search results, `Read` it first so the `Edit` matches.
 3. **Save immediately** — commit the edited file:
    `node ${CLAUDE_SKILL_DIR}/scripts/kb-save.js --edit <id> [--slug "<new-slug>"]`

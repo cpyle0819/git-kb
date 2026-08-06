@@ -25,11 +25,12 @@ git is the persistence layer and the markdown files are the source of truth.
    the mechanism behind "automatic knowledge-base retrieval for every prompt."
    The exact defaults and the full skip-pattern list are in the README's
    **"Tuning the auto-trigger"** section. Beyond keyword overlap, entries can
-   opt into **cross-cutting retrieval** — `always: true` (inject every prompt)
-   or `applies_to: [<activity>]` (inject on prompts of a matching *kind of work*,
-   e.g. writing rules on any authoring prompt) — so guidance surfaces even when
-   the prompt names none of its keywords. Set these when drafting via `add`/`edit`
-   (see `references/writing.md`); both respect the per-session dedup.
+   opt into **retrieval beyond keywords** — `kernel: true` (inject the entry's
+   full body on every prompt, exempt from dedup — the always-resident house-style
+   block) or `applies_to: [<activity>]` (inject a title pointer on prompts of a
+   matching *kind of work*, e.g. writing rules on any authoring prompt, subject to
+   dedup) — so guidance surfaces even when the prompt names none of its keywords.
+   Set these when drafting via `add`/`edit` (see `references/writing.md`).
 2. **The `/git-kb` verbs (below).** Explicit `init` / `add` / `search` / `edit` /
    `get`.
 
