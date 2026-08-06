@@ -4,9 +4,9 @@
 // it on violation so bad prose never reaches the server (a code-review
 // description, commit message, ticket, or comment).
 //
-// Why PreToolUse and not Stop: a code-review or ticket write publishes mid-turn,
-// so a turn-end check could only drive a correction after the fact. Gating the
-// tool call is a true pre-publish gate.
+// Runs pre-publish (PreToolUse): a code-review or ticket write reaches the server
+// mid-turn, so gating the tool call is the only point where a violation can stop
+// the text from being published rather than merely corrected afterward.
 //
 // Contract:
 //   stdin  : { tool_name, tool_input, ... }  (Claude Code PreToolUse payload)
@@ -43,13 +43,13 @@ const MIN_PROSE_CHARS = 60;
 // `.*YourReviewTool|.*YourTicketTool`) — no code change here, and your internal
 // tool names stay out of this shared repo.
 //
-// Tools that never publish prose worth gating — a read/search returns data, a
-// todo is scratch, a subagent launch is a prompt. Skip them even if a broad
-// matcher (e.g. `.*`) would otherwise catch them. File writes (Write/Edit/
-// MultiEdit/NotebookEdit) are NOT excluded: a written file is just as often a
-// README, a doc, a message, or a chapter as it is code, and that prose should be
-// gated — the prose/non-prose call is left to the collector + judge, not a
-// blanket tool exclusion. Bash is judged, but only its git-commit `-m` message.
+// Tools that never carry prose worth gating — a read/search returns data, a todo
+// is scratch, a subagent launch is a prompt. They're skipped even under a broad
+// matcher (e.g. `.*`). File writes (Write/Edit/MultiEdit/NotebookEdit) are in
+// scope: a written file is as often a README, a doc, a message, or a chapter as
+// it is code, so the prose/non-prose decision belongs to the collector's length
+// filter and the judge, per file, rather than to this tool list. Bash carries
+// prose only in a git-commit `-m` message.
 const EXCLUDE_TOOLS = new Set([
   "Read", "Glob", "Grep", "LS", "TodoWrite", "WebFetch", "WebSearch",
   "Task", "Agent",
