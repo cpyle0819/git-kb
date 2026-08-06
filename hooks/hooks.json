@@ -12,7 +12,7 @@
     ],
     "PreToolUse": [
       {
-        "matcher": "Bash|.*Comment|.*Review|.*Revision|.*Issue|.*Ticket|.*PullRequest",
+        "matcher": "Write|Edit|MultiEdit|NotebookEdit|Bash|.*Comment|.*Review|.*Revision|.*Issue|.*Ticket|.*PullRequest",
         "hooks": [
           {
             "type": "command",

@@ -43,13 +43,16 @@ const MIN_PROSE_CHARS = 60;
 // `.*YourReviewTool|.*YourTicketTool`) — no code change here, and your internal
 // tool names stay out of this shared repo.
 //
-// Built-in local tools never publish prose to a server — a file write is code, a
+// Tools that never publish prose worth gating — a read/search returns data, a
 // todo is scratch, a subagent launch is a prompt. Skip them even if a broad
-// matcher (e.g. `.*`) would otherwise catch them, so the gate never judges code
-// or blocks a file edit. Bash is judged, but only its git-commit `-m` message.
+// matcher (e.g. `.*`) would otherwise catch them. File writes (Write/Edit/
+// MultiEdit/NotebookEdit) are NOT excluded: a written file is just as often a
+// README, a doc, a message, or a chapter as it is code, and that prose should be
+// gated — the prose/non-prose call is left to the collector + judge, not a
+// blanket tool exclusion. Bash is judged, but only its git-commit `-m` message.
 const EXCLUDE_TOOLS = new Set([
-  "Write", "Edit", "MultiEdit", "NotebookEdit", "Read", "Glob", "Grep",
-  "LS", "TodoWrite", "WebFetch", "WebSearch", "Task", "Agent",
+  "Read", "Glob", "Grep", "LS", "TodoWrite", "WebFetch", "WebSearch",
+  "Task", "Agent",
 ]);
 
 function readPayload() {

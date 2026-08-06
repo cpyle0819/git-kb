@@ -222,14 +222,22 @@ never block a publish. Kill switch: `KB_PROSE_LINT=0`.
 
 Tool coverage lives in **one place: the hook's `matcher`** in
 [`hooks/hooks.json`](hooks/hooks.json). The shipped matcher is provider-neutral —
-`Bash` plus the substrings `Comment`, `Review`, `Revision`, `Issue`, `Ticket`,
-`PullRequest` — so it catches common code-review/issue/comment tools by name
-without hardcoding any one vendor's tool. The script trusts the matcher: any tool
-routed to it is judged, except a built-in exclude-list (`Write`, `Edit`,
-`Read`, `TodoWrite`, `Task`, …) that never publishes prose, so a broad matcher
-can't make the gate judge a file edit or block code. `Bash` is special-cased —
-only a `git commit -m` message is judged, not arbitrary commands. Short strings
-(< 60 chars), ids, slugs, enums, and URLs are skipped as non-prose.
+the file-write tools (`Write`, `Edit`, `MultiEdit`, `NotebookEdit`), `Bash`, plus
+the substrings `Comment`, `Review`, `Revision`, `Issue`, `Ticket`, `PullRequest`
+— so it catches file writes and common code-review/issue/comment tools without
+hardcoding any one vendor's tool. File writes are in scope on purpose: a written
+file is as often a README, a doc, a message, or a chapter as it is code, and that
+prose should be gated too — including prose in code comments. The script trusts
+the matcher: any tool routed to it is judged, except a built-in exclude-list
+(`Read`, `Glob`, `Grep`, `TodoWrite`, `Task`, `WebFetch`, …) that never publishes
+prose. `Bash` is special-cased — only a `git commit -m` message is judged, not
+arbitrary commands. Short strings (< 60 chars), ids, slugs, enums, and URLs are
+skipped as non-prose, so a file with no prose-length string is a fast no-op.
+
+Judging every file write means a model call on each one, code included; that's
+the deliberate trade for never missing a prose file. Set `KB_PROSE_LINT=0` to
+disable the gate for a session, or narrow the matcher in a local override if the
+latency on routine code edits isn't worth it to you.
 
 ### Covering your own toolchain
 
