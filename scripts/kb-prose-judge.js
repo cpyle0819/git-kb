@@ -48,8 +48,9 @@ const MIN_PROSE_CHARS = 60;
 // matcher (e.g. `.*`). File writes (Write/Edit/MultiEdit/NotebookEdit) are in
 // scope: a written file is as often a README, a doc, a message, or a chapter as
 // it is code, so the prose/non-prose decision belongs to the collector's length
-// filter and the judge, per file, rather than to this tool list. Bash carries
-// prose only in a git-commit `-m` message.
+// filter and the judge, per file, rather than to this tool list. Bash is judged
+// only when the command matches a local-config pattern (see bashCommandOptedIn);
+// the whole command string goes to the judge, with no shape parsing here.
 const EXCLUDE_TOOLS = new Set([
   "Read", "Glob", "Grep", "LS", "TodoWrite", "WebFetch", "WebSearch",
   "Task", "Agent",
@@ -106,21 +107,31 @@ function collectProse(obj, path = "") {
   return out;
 }
 
-// For Bash git commits, the prose is a -m message inside the command string.
-// Extract single/double-quoted -m values; skip anything else (heredocs, -F
-// files) — judging those reliably isn't worth the false-positive risk.
-function collectCommitProse(command) {
-  if (!command || !/\bgit\b[^|&;]*\bcommit\b/.test(command)) return [];
-  const out = [];
-  const re = /-m\s*(?:"((?:[^"\\]|\\.)*)"|'((?:[^'\\]|\\.)*)')/g;
-  let m;
-  while ((m = re.exec(command)) !== null) {
-    const msg = (m[1] ?? m[2] ?? "").replace(/\\(["'])/g, "$1").trim();
-    if (msg.length >= MIN_PROSE_CHARS && /\s/.test(msg)) {
-      out.push({ field: "commit message", text: msg });
-    }
+// Bash commands carry prose in shapes that differ per shell tool (git commit
+// `-m`, an internal CR CLI's `--description`, and so on). Encoding those shapes
+// here would put tool-specific parsing — and internal tool names — into this
+// shared script. Instead the LOCAL config (`kb-config.json`, never this repo)
+// lists regex patterns naming which commands publish prose worth judging; a
+// matching command is handed to the semantic judge verbatim, and the model finds
+// and judges any prose in the command string itself. Prose that lives in a file
+// the command only references by path is not inlined — the judge sees the path,
+// not the file. With no `bash_judge_patterns` configured, no Bash command is
+// judged.
+function bashCommandOptedIn(command) {
+  if (!command) return false;
+  try {
+    const cfg = JSON.parse(readFileSync(getConfigPath(), "utf8"));
+    const pats = Array.isArray(cfg.bash_judge_patterns) ? cfg.bash_judge_patterns : [];
+    return pats.some((p) => {
+      try {
+        return new RegExp(p).test(command);
+      } catch {
+        return false; // a malformed config pattern must never break the judge
+      }
+    });
+  } catch {
+    return false;
   }
-  return out;
 }
 
 // Fetch the kernel rule text from the KB (entries flagged kernel: true). Returns
@@ -153,6 +164,11 @@ function judge(rules, artifact) {
     "correctness of the underlying facts — judge the writing only. Flag a violation " +
     "only when it clearly breaks a rule; when in doubt, pass (false positives block " +
     "a real publish, so bias toward passing borderline cases).\n\n" +
+    "The artifact may be a shell command that carries the prose to publish in a file " +
+    "it references by path (for example a `--description <path>` or `-F <path>` " +
+    "argument) rather than inline. When it does, read that file with the Read tool and " +
+    "judge its contents as the artifact. Judge the prose being published, never the " +
+    "shell syntax around it. If no such file is referenced, judge the text as given.\n\n" +
     "=== HOUSE STYLE RULES ===\n" +
     rules +
     "\n\n=== ARTIFACT TO JUDGE ===\n" +
@@ -165,7 +181,8 @@ function judge(rules, artifact) {
   try {
     raw = execFileSync(
       CLAUDE_BIN,
-      ["-p", prompt, "--output-format", "text", "--model", JUDGE_MODEL],
+      ["-p", prompt, "--output-format", "text", "--model", JUDGE_MODEL,
+       "--allowedTools", "Read"],
       { encoding: "utf8", timeout: JUDGE_TIMEOUT_MS, stdio: ["ignore", "pipe", "ignore"] },
     );
   } catch {
@@ -215,7 +232,10 @@ let proseFields = [];
 if (isArtifactTool(toolName)) {
   proseFields = collectProse(toolInput);
 } else if (toolName === "Bash" || /(^|_)Bash$/i.test(toolName)) {
-  proseFields = collectCommitProse(toolInput.command ?? "");
+  const command = toolInput.command ?? "";
+  if (bashCommandOptedIn(command)) {
+    proseFields = [{ field: "command", text: command }];
+  }
 }
 if (proseFields.length === 0) allow(); // nothing prose-like to judge
 
