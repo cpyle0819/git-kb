@@ -250,8 +250,11 @@ const list = verdict.violations.length
   ? verdict.violations.map((v) => `  • ${v}`).join("\n")
   : "  • (house-style violation flagged; no specifics returned)";
 deny(
-  "House-style prose check blocked this artifact before publishing. Revise the " +
-    "text and retry — do not bypass.\n\nViolations:\n" +
+  "House-style prose check blocked this artifact before publishing. The tool call " +
+    "did NOT run: nothing was written and the file is unchanged. Build the retry " +
+    "against the file's current on-disk text — the prose you just proposed was " +
+    "never applied, so an old_string that quotes it will not match. Revise the " +
+    "wording and retry; do not bypass.\n\nViolations:\n" +
     list +
     "\n\n(This gate enforces the KB prose kernel. Kill switch if it misfires: set " +
     "KB_PROSE_LINT=0.)",
