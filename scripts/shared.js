@@ -72,9 +72,16 @@ export function parseEntry(text) {
 // negatives surface. Keys are activity names an entry can list in `applies_to`.
 export const ACTIVITY_LEXICON = {
   writing: [
-    "write", "writing", "wrote", "draft", "drafting", "author", "authoring",
-    "compose", "rewrite", "reword", "rephrase", "edit", "revise", "proofread",
-    "summarize", "summary", "summarise", "prose", "wording", "phrasing", "tone",
+    "write", "writing", "wrote", "writes", "draft", "drafting", "drafted",
+    "drafts", "author", "authoring", "authored", "compose", "composing",
+    "composed", "rewrite", "rewriting", "rewrote", "reword", "rewording",
+    "reworded", "rephrase", "rephrasing", "rephrased", "edit", "editing",
+    "edited", "edits", "revise", "revising", "revised", "proofread",
+    "summarize", "summarizing", "summarized", "summary", "summarise",
+    "summarising", "summarised", "prose", "wording", "phrasing", "tone",
+    "tighten", "tightening", "tightened", "shorten", "shortening", "shortened",
+    "polish", "polishing", "polished", "clarify", "clarifying", "clarified",
+    "condense", "condensing", "condensed", "trim", "trimming", "trimmed",
     "reply", "respond", "response", "message", "email", "comment", "note",
     "thread", "post", "announcement", "blurb", "copy", "readme", "doc", "docs",
     "documentation", "changelog", "ticket", "commit", "description", "update",
