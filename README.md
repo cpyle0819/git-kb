@@ -77,6 +77,14 @@ Refresh behavior:
   git-kb@git-kb-local`, which refreshes the installed plugin cache from the
   current checkout; start a new thread afterward.
 
+The Codex plugin bundle also includes a `PreToolUse` prose guard. After install
+or refresh, open `/hooks` in Codex and trust the updated hook definition before
+relying on it.
+
+When hooks or skill-invoked helpers need Node in a stripped-down agent shell,
+the bundle uses `scripts/run-node.sh` to locate a real `node` binary without
+relying on `PATH`.
+
 If you prefer the old manual Claude install, it still works:
 
 ```bash
@@ -91,7 +99,7 @@ Then `/git-kb init` inside Claude Code to wire the `kb-data` repo.
 .claude-plugin/plugin.json   Claude plugin manifest
 .codex-plugin/plugin.json    Codex plugin manifest
 hooks/hooks.json             Claude hook set: trigger + prose judge
-hooks/codex-hooks.json       Codex hook set: trigger only
+hooks/codex-hooks.json       Codex hook set: trigger + prose judge
 SKILL.md                     Claude /git-kb skill
 codex-skills/git-kb/         Codex skill bundle
 references/
@@ -105,8 +113,10 @@ scripts/
   kb-search.js               lexical search, ranked by field weight
   kb-get.js                  fetch entries by ID, printed verbatim
   kb-save.js                 validate + write + commit + push + rebuild index
+  run-node.sh                locate Node.js for hooks/skills when agent PATH is minimal
   shared.js                  config resolution + entry parse/load helpers
   init.js                    bootstrap host install + kb-data setup
+  kb-prose-judge-codex.js    Codex `PreToolUse` prose guard
 workflows/
   test-skill.js              /git-kb:test-skill — fresh-eyes test harness (see below)
 ```
@@ -270,9 +280,11 @@ the text is already out. Gating the tool call is a true pre-publish gate.
 timeout, unparseable verdict — resolves to *allow*. A judge that can't run must
 never block a publish. Kill switch: `KB_PROSE_LINT=0`.
 
-**Codex note:** the Codex plugin bundle currently installs only the retrieval
-hook. The prose judge remains Claude-specific because it shells out to the
-`claude` binary today.
+**Codex note:** the Codex bundle now installs both the retrieval hook and a
+Codex-native `PreToolUse` prose guard. Codex only intercepts supported
+`PreToolUse` paths such as Bash, `apply_patch` (`Edit`/`Write` aliases), and
+MCP tools; it does not currently intercept every shell path or tools such as
+`WebSearch`.
 
 ### What it judges
 
@@ -286,9 +298,12 @@ file is as often a README, a doc, a message, or a chapter as it is code, and tha
 prose should be gated too — including prose in code comments. The script trusts
 the matcher: any tool routed to it is judged, except a built-in exclude-list
 (`Read`, `Glob`, `Grep`, `TodoWrite`, `Task`, `WebFetch`, …) that never publishes
-prose. `Bash` is special-cased — only a `git commit -m` message is judged, not
-arbitrary commands. Short strings (< 60 chars), ids, slugs, enums, and URLs are
-skipped as non-prose, so a file with no prose-length string is a fast no-op.
+prose. `Bash` is special-cased: commit-message style flags such as `-m`, file
+arguments such as `--body-file`, and obvious inline text writes such as
+`printf ... > README.md` or `echo ... | tee file` are judged; plain shell
+inspection commands are ignored. Short strings (< 60 chars), ids, slugs, enums,
+and URLs are skipped as non-prose, so a file with no prose-length string is a
+fast no-op.
 
 Judging every file write means a model call on each one, code included; that's
 the deliberate trade for never missing a prose file. Set `KB_PROSE_LINT=0` to
@@ -309,7 +324,7 @@ pointing at the plugin script — internal tool names stay out of this shared re
         "hooks": [
           {
             "type": "command",
-            "command": "node ${CLAUDE_PLUGIN_ROOT}/scripts/kb-prose-judge.js",
+            "command": "${CLAUDE_PLUGIN_ROOT}/scripts/run-node.sh ${CLAUDE_PLUGIN_ROOT}/scripts/kb-prose-judge.js",
             "timeout": 60
           }
         ]
@@ -329,6 +344,10 @@ matcher sends it (minus the exclude-list). No env var, no code change.
   but stricter on borderline cases).
 - `KB_PROSE_LINT_TIMEOUT_MS` — judge timeout (default 45000; on timeout, fail open).
 - `KB_PROSE_LINT_CLAUDE` — path to the `claude` binary if not on `PATH`.
+- `KB_PROSE_LINT_CODEX` — path to the `codex` binary for the Codex-native judge.
+- `KB_PROSE_LINT_DEBUG=1` — emit debug events for the Codex judge.
+- `KB_PROSE_LINT_DEBUG_LOG` — override the Codex debug log path
+  (default `/tmp/kb-prose-judge-codex.debug.jsonl`).
 
 ## Trade-offs
 

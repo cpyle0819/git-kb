@@ -25,6 +25,7 @@ unknown repo.
 
 Write `{"data_dir": "<resolved-absolute-path>"}` to
 `${CLAUDE_PLUGIN_DATA}/kb-config.json` (the only file the skill writes
-directly), then run `node ${CLAUDE_SKILL_DIR}/scripts/kb-build-index.js` to
-generate `kb-index.json` (used by the auto-trigger hook). Confirm setup is
+directly), then run
+`${CLAUDE_SKILL_DIR}/scripts/run-node.sh ${CLAUDE_SKILL_DIR}/scripts/kb-build-index.js`
+to generate `kb-index.json` (used by the auto-trigger hook). Confirm setup is
 complete.

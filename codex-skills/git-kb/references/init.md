@@ -25,8 +25,9 @@ unknown repo.
 
 Write `{"data_dir": "<resolved-absolute-path>"}` to
 `~/.codex/git-kb/kb-config.json` (create the parent directory if needed), then
-run `node ../../scripts/kb-build-index.js` to generate `kb-index.json` (used by
-the auto-trigger hook). Hook processes also honor `<plugin data>/kb-config.json`
-when Codex provides plugin env vars. Direct script runs can pin a config file
-with `KB_CONFIG_PATH=/path/to/kb-config.json`. You do not need to write the
-plugin-scoped path directly. Confirm setup is complete.
+run `../../scripts/run-node.sh ../../scripts/kb-build-index.js` to generate
+`kb-index.json` (used by the auto-trigger hook). Hook processes also honor
+`<plugin data>/kb-config.json` when Codex provides plugin env vars. Direct
+script runs can pin a config file with `KB_CONFIG_PATH=/path/to/kb-config.json`.
+You do not need to write the plugin-scoped path directly. Confirm setup is
+complete.

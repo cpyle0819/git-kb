@@ -4,7 +4,7 @@ description: Automatic knowledge-base (kb) retrieval for every prompt. Uses keyw
 argument-hint: <verb> <content> # verb = init|add|search|edit|get
 model: sonnet
 effort: low
-allowed-tools: Read, Write(${CLAUDE_PLUGIN_DATA}/kb-config.json), Write(*/entries/*.md), Edit(*/entries/*.md), Bash(node ${CLAUDE_SKILL_DIR}/scripts/kb-search.js *), Bash(node ${CLAUDE_SKILL_DIR}/scripts/kb-get.js *), Bash(node ${CLAUDE_SKILL_DIR}/scripts/kb-save.js *), Bash(node ${CLAUDE_SKILL_DIR}/scripts/kb-build-index.js), Bash(git clone *), Bash(git init *), Bash(mkdir *), AskUserQuestion
+allowed-tools: Read, Write(${CLAUDE_PLUGIN_DATA}/kb-config.json), Write(*/entries/*.md), Edit(*/entries/*.md), Bash(${CLAUDE_SKILL_DIR}/scripts/run-node.sh ${CLAUDE_SKILL_DIR}/scripts/kb-search.js *), Bash(${CLAUDE_SKILL_DIR}/scripts/run-node.sh ${CLAUDE_SKILL_DIR}/scripts/kb-get.js *), Bash(${CLAUDE_SKILL_DIR}/scripts/run-node.sh ${CLAUDE_SKILL_DIR}/scripts/kb-save.js *), Bash(${CLAUDE_SKILL_DIR}/scripts/run-node.sh ${CLAUDE_SKILL_DIR}/scripts/kb-build-index.js), Bash(git clone *), Bash(git init *), Bash(mkdir *), AskUserQuestion
 ---
 
 # /git-kb — git-backed knowledge base
@@ -97,7 +97,7 @@ pull, no file reads. The helper does all of that. Two steps only:
    this is how we recover semantic recall without embeddings (e.g. a query about
    "shipping" should also try "deploy", "release", "pipeline"). Then run the
    helper in the SAME step, passing each term as a separate argument:
-   `node ${CLAUDE_SKILL_DIR}/scripts/kb-search.js "<term1>" "<term2>" ...`
+   `${CLAUDE_SKILL_DIR}/scripts/run-node.sh ${CLAUDE_SKILL_DIR}/scripts/kb-search.js "<term1>" "<term2>" ...`
    **Optional filter:** add `--type <type>` to restrict results to a single entry
    type (e.g. `--type bookmark "*"` lists all bookmarks; `--type decision "*"`
    lists all decisions). Use `"*"` as the term to list all matching the type
@@ -130,7 +130,7 @@ id — e.g. following a `links:`/`[[kb-XXXXX]]` reference from an entry already
 in context, or a hook-injected list of ids — instead of guessing keywords for
 `search`. **Do no setup** — the helper resolves `data_dir` itself.
 
-`node ${CLAUDE_SKILL_DIR}/scripts/kb-get.js kb-0065 kb-0053 ...`
+`${CLAUDE_SKILL_DIR}/scripts/run-node.sh ${CLAUDE_SKILL_DIR}/scripts/kb-get.js kb-0065 kb-0053 ...`
 
 It prints each entry's full body (frontmatter + body + resolved `links:`), in
 the order requested. An unknown ID prints a `NOT FOUND` line and does **not**

@@ -198,16 +198,20 @@ function cloneRepo(url, dataDir) {
   return validateDataRepo(expanded);
 }
 
-function writeConfig(configPath, dataDir) {
+function writeConfig(configPath, dataDir, templatePath = null) {
   const current = readJson(configPath);
-  const next = current && typeof current === "object" ? current : {};
+  const template = templatePath ? readJson(templatePath) : null;
+  const next = {
+    ...((template && typeof template === "object") ? template : {}),
+    ...((current && typeof current === "object") ? current : {}),
+  };
   next.data_dir = dataDir;
   writeJson(configPath, next);
 }
 
 function syncCompanionConfig(primaryPath, companionPath, dataDir) {
   if (primaryPath === companionPath || !existsSync(companionPath)) return false;
-  writeConfig(companionPath, dataDir);
+  writeConfig(companionPath, dataDir, primaryPath);
   return true;
 }
 
@@ -353,6 +357,8 @@ async function main() {
 
   const host = await chooseHost(availableHosts);
   const install = host === "claude" ? installClaude() : installCodex();
+  const companionPath =
+    host === "claude" ? getCodexFallbackConfigPath() : getClaudeFallbackConfigPath();
   if (values.refresh) {
     const configured = currentConfiguredRepo(install.configPath);
     if (!configured) {
@@ -360,11 +366,16 @@ async function main() {
         `No valid existing KB config found at ${install.configPath}. Run init without --refresh first.`,
       );
     }
+    writeConfig(install.configPath, configured, companionPath);
+    const syncedCompanion = syncCompanionConfig(install.configPath, companionPath, configured);
     rebuildIndex(install.configPath);
     say("");
     say(install.summary);
     say(`KB data repo: ${configured}`);
-    say(`Config reused: ${install.configPath}`);
+    say(`Config refreshed: ${install.configPath}`);
+    if (syncedCompanion) {
+      say(`Companion config synced: ${companionPath}`);
+    }
     if (host === "claude") {
       say("Refresh complete. Start a new Claude Code session to pick up updated skill files.");
     } else {
@@ -374,9 +385,7 @@ async function main() {
   }
 
   const dataDir = await chooseDataRepo(install.configPath);
-  writeConfig(install.configPath, dataDir);
-  const companionPath =
-    host === "claude" ? getCodexFallbackConfigPath() : getClaudeFallbackConfigPath();
+  writeConfig(install.configPath, dataDir, companionPath);
   const syncedCompanion = syncCompanionConfig(install.configPath, companionPath, dataDir);
   rebuildIndex(install.configPath);
 
@@ -390,7 +399,7 @@ async function main() {
   if (host === "claude") {
     say("Next step: open a new Claude Code session and run /git-kb search or /git-kb add.");
   } else {
-    say("Next step: open a new Codex thread. If Codex asks, trust the git-kb UserPromptSubmit hook.");
+    say("Next step: open a new Codex thread. If Codex asks, trust the git-kb hooks.");
   }
 }
 

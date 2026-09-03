@@ -22,7 +22,7 @@ import { readFileSync } from "node:fs";
 import { execFileSync } from "node:child_process";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
-import { getConfigPath, expandHome } from "./shared.js";
+import { getConfigPath, resolveDataDir, loadEntries } from "./shared.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -138,17 +138,19 @@ function bashCommandOptedIn(command) {
 // "" if anything fails — the caller fails open on empty rules.
 function loadKernelRules() {
   try {
-    const cfg = JSON.parse(readFileSync(getConfigPath(), "utf8"));
-    const dataDir = expandHome(cfg.data_dir);
-    const index = JSON.parse(readFileSync(join(dataDir, "kb-index.json"), "utf8"));
+    const resolved = resolveDataDir();
+    if (resolved.error) return "";
+    const index = JSON.parse(readFileSync(join(resolved.dataDir, "kb-index.json"), "utf8"));
     const ids = index["__kernel__"] ?? [];
     if (ids.length === 0) return "";
-    const out = execFileSync("node", [join(__dirname, "kb-get.js"), ...ids], {
-      encoding: "utf8",
-      timeout: 5000,
-      stdio: ["ignore", "pipe", "ignore"],
-    });
-    return out.trim();
+    const { entries } = loadEntries(resolved.entriesDir);
+    const byId = new Map(entries.map((e) => [e.id, e]));
+    return ids
+      .map((id) => byId.get(id))
+      .filter(Boolean)
+      .map((entry) => `### ${entry.id} — ${entry.title}\n---\n${entry.body}\n---`)
+      .join("\n\n")
+      .trim();
   } catch {
     return "";
   }

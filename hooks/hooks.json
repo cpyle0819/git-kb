@@ -5,7 +5,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node ${CLAUDE_PLUGIN_ROOT}/scripts/kb-trigger.js"
+            "command": "${CLAUDE_PLUGIN_ROOT}/scripts/run-node.sh ${CLAUDE_PLUGIN_ROOT}/scripts/kb-trigger.js"
           }
         ]
       }
@@ -16,7 +16,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node ${CLAUDE_PLUGIN_ROOT}/scripts/kb-prose-judge.js",
+            "command": "${CLAUDE_PLUGIN_ROOT}/scripts/run-node.sh ${CLAUDE_PLUGIN_ROOT}/scripts/kb-prose-judge.js",
             "timeout": 60
           }
         ]

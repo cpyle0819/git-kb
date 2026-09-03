@@ -9,14 +9,14 @@ review the file; the helper does the git plumbing.
 The helper takes the entry content from one of three sources, in this precedence:
 
 1. **`--file <path>`** — the file you just `Write`/`Edit`-ed. This is the primary
-   path: `node ../../scripts/kb-save.js --file entries/<name>.md ...`.
+   path: `../../scripts/run-node.sh ../../scripts/kb-save.js --file entries/<name>.md ...`.
 2. **Edit-in-place** (edit mode only) — with **no `--file` and empty stdin**, the
    helper commits the entry file you already edited on disk. Since `search`/`get`
    print the entry's absolute `file:` path (`<data_dir>/entries/kb-NNNN-*.md`), you
    can `Edit` that path directly and call `--edit kb-NNNN` with nothing piped.
 3. **stdin (heredoc)** — the fallback, for piping a program's output straight in
-   (e.g. `some-extractor | node kb-save.js --slug ...`). Empty stdin (a TTY or
-   `< /dev/null`) does NOT count as stdin content.
+   (e.g. `some-extractor | ../../scripts/run-node.sh ../../scripts/kb-save.js --slug ...`).
+   Empty stdin (a TTY or `< /dev/null`) does NOT count as stdin content.
 
 ## Gotchas (read before saving)
 
@@ -51,7 +51,7 @@ thesis, separate entries for distinct findings, joined with `part_of` /
 
 1. **Find candidate link targets.** To propose `links`, you need the ids of
    related existing entries: run the search helper with terms from the new
-   knowledge (`node ../../scripts/kb-search.js "<term>" ...`) and
+   knowledge (`../../scripts/run-node.sh ../../scripts/kb-search.js "<term>" ...`) and
    note the `kb-NNNN` ids of genuine matches. Only link to ids it returns.
 2. **Draft the entry** (use `id: __ID__` as a placeholder — the helper assigns
    the real id):
@@ -133,7 +133,7 @@ thesis, separate entries for distinct findings, joined with `part_of` /
    the real id and renames the file.
 
 3. **Save immediately** — hand the draft file to the helper with `--file`:
-   `node ../../scripts/kb-save.js --slug "<slug-from-title>" --file entries/<slug>.md`
+   `../../scripts/run-node.sh ../../scripts/kb-save.js --slug "<slug-from-title>" --file entries/<slug>.md`
    (the `--slug` sets the final filename; the helper prefixes the `kb-NNNN` id.)
    It resolves `data_dir`, pulls (if upstream), assigns a collision-free id,
    validates (closed enums, no dangling links), renames the draft to
@@ -141,7 +141,7 @@ thesis, separate entries for distinct findings, joined with `part_of` /
    `SAVED kb-NNNN ...` with a `push:` line. If it prints an `ERROR:` line, fix the
    entry and retry; if the error is about `data_dir`, stop and point the user to
    `$git-kb init`. (Piping a program's output? Use the stdin heredoc fallback
-   instead of `--file` — the command must still start with `node`.)
+   instead of `--file`.)
 
    **Splitting into multiple entries:** the helper assigns each id at save time,
    so you can't reference a sibling's id before it exists. Save the **anchor**
@@ -171,7 +171,7 @@ replaced** by new thinking, do NOT edit in place — `add` a new entry with a
    edit turns the entry into cross-cutting guidance). If the entry
    wasn't in the search results, `Read` it first so the `Edit` matches.
 3. **Save immediately** — commit the edited file:
-   `node ../../scripts/kb-save.js --edit <id> [--slug "<new-slug>"]`
+   `../../scripts/run-node.sh ../../scripts/kb-save.js --edit <id> [--slug "<new-slug>"]`
    With no `--file` and nothing piped, the helper commits the file you just
    edited on disk. Include `--slug` only if the title changed enough to warrant a
    rename (the helper does a `git mv`). It validates, commits `edit kb-NNNN: ...`
@@ -186,5 +186,5 @@ replaced** by new thinking, do NOT edit in place — `add` a new entry with a
 When the `push:` line from `kb-save.js` says `NO_REMOTE`, the data repo has no
 git remote yet. **Ask the user for the kb-data remote URL** (the URL must come
 from them — for sensitive data, use an internal git host). On their confirmation:
-`node ../../scripts/kb-save.js --set-remote "<url>"`
+`../../scripts/run-node.sh ../../scripts/kb-save.js --set-remote "<url>"`
 This adds `origin`, pushes all commits, and sets upstream. Never invent a URL.

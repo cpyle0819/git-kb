@@ -31,8 +31,9 @@ git is the persistence layer and the markdown files are the source of truth.
    `get`.
 
 When you need one of these operations, invoke this skill directly or run the
-bundled scripts under `../../scripts/`. Do not do speculative setup before
-dispatching; each verb handles only the work it needs.
+bundled scripts under `../../scripts/` via `../../scripts/run-node.sh`. Do not
+do speculative setup before dispatching; each verb handles only the work it
+needs.
 
 ## Dispatch first — do only what the verb needs
 
@@ -85,7 +86,7 @@ pull, no file reads. The helper does all of that. Two steps only:
    this is how we recover semantic recall without embeddings (e.g. a query about
    "shipping" should also try "deploy", "release", "pipeline"). Then run the
    helper in the SAME step, passing each term as a separate argument:
-   `node ../../scripts/kb-search.js "<term1>" "<term2>" ...`
+   `../../scripts/run-node.sh ../../scripts/kb-search.js "<term1>" "<term2>" ...`
    **Optional filter:** add `--type <type>` to restrict results to a single entry
    type (e.g. `--type bookmark "*"` lists all bookmarks; `--type decision "*"`
    lists all decisions). Use `"*"` as the term to list all matching the type
@@ -118,7 +119,7 @@ id — e.g. following a `links:`/`[[kb-XXXXX]]` reference from an entry already
 in context, or a hook-injected list of ids — instead of guessing keywords for
 `search`. **Do no setup** — the helper resolves `data_dir` itself.
 
-`node ../../scripts/kb-get.js kb-0065 kb-0053 ...`
+`../../scripts/run-node.sh ../../scripts/kb-get.js kb-0065 kb-0053 ...`
 
 It prints each entry's full body (frontmatter + body + resolved `links:`), in
 the order requested. An unknown ID prints a `NOT FOUND` line and does **not**
