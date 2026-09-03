@@ -1,0 +1,40 @@
+{
+  "name": "git-kb",
+  "version": "1.0.0",
+  "description": "Git-backed personal knowledge base with automatic prompt retrieval and explicit maintenance verbs.",
+  "skills": "./codex-skills",
+  "hooks": "./hooks/codex-hooks.json",
+  "author": {
+    "name": "Corey Pyle",
+    "url": "https://github.com/cpyle0819"
+  },
+  "homepage": "https://github.com/cpyle0819/git-kb",
+  "repository": "https://github.com/cpyle0819/git-kb",
+  "keywords": [
+    "knowledge-base",
+    "git",
+    "markdown",
+    "hooks"
+  ],
+  "interface": {
+    "displayName": "git-kb",
+    "shortDescription": "Git-backed markdown KB for Codex.",
+    "longDescription": "Search, fetch, add, and edit entries in a git-backed markdown knowledge base, with an automatic retrieval hook for relevant context.",
+    "developerName": "Corey Pyle",
+    "category": "Productivity",
+    "capabilities": [
+      "Skills",
+      "Hooks",
+      "Write"
+    ],
+    "websiteURL": "https://github.com/cpyle0819/git-kb",
+    "privacyPolicyURL": "https://docs.github.com/en/site-policy/privacy-policies/github-general-privacy-statement",
+    "termsOfServiceURL": "https://docs.github.com/en/site-policy/github-terms/github-terms-of-service",
+    "defaultPrompt": [
+      "Initialize git-kb against my kb-data repo.",
+      "Search git-kb for past deployment decisions.",
+      "Add this debugging lesson to git-kb."
+    ],
+    "brandColor": "#2563EB"
+  }
+}

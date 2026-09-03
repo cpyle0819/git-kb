@@ -4,12 +4,29 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 import { existsSync, readFileSync, readdirSync } from "node:fs";
 
+export function getClaudeFallbackConfigPath() {
+  return join(homedir(), ".claude", "kb-config.json");
+}
+
+export function getCodexFallbackConfigPath() {
+  return join(homedir(), ".codex", "git-kb", "kb-config.json");
+}
+
 export function getConfigPath() {
+  if (process.env.KB_CONFIG_PATH) {
+    return process.env.KB_CONFIG_PATH;
+  }
+  if (process.env.PLUGIN_DATA) {
+    const p = join(process.env.PLUGIN_DATA, "kb-config.json");
+    if (existsSync(p)) return p;
+  }
   if (process.env.CLAUDE_PLUGIN_DATA) {
     const p = join(process.env.CLAUDE_PLUGIN_DATA, "kb-config.json");
     if (existsSync(p)) return p;
   }
-  return join(homedir(), ".claude", "kb-config.json");
+  const codexPath = getCodexFallbackConfigPath();
+  if (existsSync(codexPath)) return codexPath;
+  return getClaudeFallbackConfigPath();
 }
 
 // Expand a leading ~ (home dir) in a config path. Kept here so callers don't

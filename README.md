@@ -1,8 +1,8 @@
 # git-kb
 
-A Claude Code plugin for maintaining a personal knowledge base in plain markdown
-and git. Entries live in a separate private `kb-data` repo; this repo is the
-system — skill definition, scripts, hook, and spec.
+A git-backed personal knowledge base for Claude Code and Codex. Entries live in
+a separate private `kb-data` repo; this repo is the system — skill definition,
+scripts, hooks, and spec.
 
 No database, no server, no embeddings. Git is the persistence layer. Search is
 lexical with LLM query expansion at invocation. A `links:` block in frontmatter
@@ -30,29 +30,73 @@ comment — against the kernel rules, and denies the tool call on violation so b
 prose never reaches the server. Retrieval puts the rules in front of the model;
 this gates the output against them. See [The prose judge](#the-prose-judge).
 
-**Intentional (skill).** `/git-kb search <query>` with full LLM query expansion for
-semantic recall. `/git-kb add`, `/git-kb edit` for writes.
+**Intentional (skill).** `/git-kb search <query>` in Claude Code or `$git-kb
+search <query>` in Codex, with full LLM query expansion for semantic recall.
 
 ## Install
 
+Clone the repo, then run:
+
+```bash
+node scripts/init.js
 ```
+
+For non-interactive setup, pass flags such as:
+
+```bash
+node scripts/init.js --host codex --data-mode existing --data-path ~/kb-data --yes
+```
+
+To refresh an existing install after changing this checkout:
+
+```bash
+node scripts/init.js --host codex --refresh --yes
+```
+
+The bootstrap script detects which hosts are available, asks you to pick one
+(`claude` or `codex`), installs the repo into that host, then wires the
+`kb-data` repo by letting you choose one of:
+
+- an existing local clone
+- a fresh `git clone`
+- a brand-new empty `kb-data` repo
+
+Host-specific behavior:
+
+- **Claude Code** — creates `~/.claude/skills/git-kb -> <clone>` and writes the
+  KB config to `~/.claude/kb-config.json`.
+- **Codex** — installs the repo as a local plugin via a generated marketplace at
+  `~/.codex/git-kb-marketplace` and writes the KB config to
+  `~/.codex/git-kb/kb-config.json`.
+
+Refresh behavior:
+
+- **Claude Code** — re-checks the symlink and rebuilds the KB index from the
+  existing config; start a new session afterward.
+- **Codex** — re-runs local marketplace install plus `codex plugin add
+  git-kb@git-kb-local`, which refreshes the installed plugin cache from the
+  current checkout; start a new thread afterward.
+
+If you prefer the old manual Claude install, it still works:
+
+```bash
 ln -s "$PWD" ~/.claude/skills/git-kb
 ```
 
-Then `/git-kb init` — it asks for the `kb-data` repo (clone URL, existing local
-clone, or new), builds the keyword index, and you're done. The plugin manifest
-(`.claude-plugin/plugin.json`) makes Claude Code discover the hook on next
-session start without any settings.json edits.
+Then `/git-kb init` inside Claude Code to wire the `kb-data` repo.
 
 ## Layout
 
 ```
-.claude-plugin/plugin.json   plugin manifest (hook auto-discovery)
-hooks/hooks.json             UserPromptSubmit → kb-trigger.js; PreToolUse → kb-prose-judge.js
-SKILL.md                     /git-kb skill: dispatch + inline search + rules
+.claude-plugin/plugin.json   Claude plugin manifest
+.codex-plugin/plugin.json    Codex plugin manifest
+hooks/hooks.json             Claude hook set: trigger + prose judge
+hooks/codex-hooks.json       Codex hook set: trigger only
+SKILL.md                     Claude /git-kb skill
+codex-skills/git-kb/         Codex skill bundle
 references/
   writing.md                 add + edit detail (loaded on those verbs)
-  init.md                     setup detail (loaded on init)
+  init.md                    setup detail (loaded on init)
 spec/entry-format.md         entry schema (types, rels, frontmatter)
 scripts/
   kb-trigger.js              hook: tokenize prompt, check index, inject context
@@ -62,6 +106,7 @@ scripts/
   kb-get.js                  fetch entries by ID, printed verbatim
   kb-save.js                 validate + write + commit + push + rebuild index
   shared.js                  config resolution + entry parse/load helpers
+  init.js                    bootstrap host install + kb-data setup
 workflows/
   test-skill.js              /git-kb:test-skill — fresh-eyes test harness (see below)
 ```
@@ -77,10 +122,17 @@ workflows/
 | `/git-kb edit <id or desc> <change>` | Modify an entry in place |
 | `/git-kb:test-skill` | Fresh-eyes test of the skill (see below) |
 
+In Codex, invoke the same verbs through the bundled skill as `$git-kb <verb> ...`.
+
 **Automatic retrieval has no command.** Once `/git-kb init` has run, the
 `UserPromptSubmit` hook fires on every prompt with no action from you — see
 [Two layers of access](#two-layers-of-access). The `/git-kb` verbs are the only
 part you invoke explicitly; the hook is always-on background context injection.
+
+**Direct script runs outside the host** can pin a specific config file with
+`KB_CONFIG_PATH=/path/to/kb-config.json node scripts/kb-search.js ...`. This is
+useful if you keep both Claude and Codex fallback configs on disk and want to
+force one of them.
 
 **Per-session dedup.** When the hook surfaces an entry as a **pointer** (keyword
 or activity match), it records that id in a per-session ledger under the temp
@@ -217,6 +269,10 @@ the text is already out. Gating the tool call is a true pre-publish gate.
 **Fail-open, always.** Every error path — no payload, no kernel rules, judge
 timeout, unparseable verdict — resolves to *allow*. A judge that can't run must
 never block a publish. Kill switch: `KB_PROSE_LINT=0`.
+
+**Codex note:** the Codex plugin bundle currently installs only the retrieval
+hook. The prose judge remains Claude-specific because it shells out to the
+`claude` binary today.
 
 ### What it judges
 

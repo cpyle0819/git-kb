@@ -1,5 +1,9 @@
 {
   "name": "git-kb",
   "version": "1.0.0",
-  "description": "Git-backed personal knowledge base with automatic context injection"
+  "description": "Git-backed personal knowledge base with automatic context injection",
+  "author": {
+    "name": "Corey Pyle",
+    "url": "https://github.com/cpyle0819"
+  }
 }
